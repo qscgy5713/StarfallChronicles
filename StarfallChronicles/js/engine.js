@@ -225,7 +225,7 @@ class StarfallEngine {
     this.state.sharpness = 100;
     this.state.polishTurns = 2;
     if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("puzzle");
-    const msg = `[砥石研磨] 使用高速砥石打磨武器！斬味恢復至【100 紫斬 (1.38x 傷害)】並獲得 2 回合【剛刃研磨 (不掉斬味 & 暴擊+15%)】！`;
+    const msg = `[砥石研磨] 使用高速砥石打磨武器！斬味恢復至【100 紫斬 (1.38x 傷害)】並獲得 2 次攻擊的【剛刃研磨 (不掉斬味 & 暴擊+15%)】！`;
     if (this.combat) {
       this.combat.log.push(msg);
       this.combat.fx = { text: "SHARPEN! 紫斬 1.38x", color: "#c084fc", ticks: 26 };
@@ -2926,7 +2926,7 @@ class StarfallEngine {
 
     const scale = ev.abyssScale || 1.0;
     const comp = this.getComputedStats();
-    // 即時戰鬥中玩家出手頻率遠高於回合制 (約 4~5 倍)，魔物生命以 RT_HP_MULT 倍補償，使一般魔物約 8~12 秒可擊倒
+    // 即時戰鬥中玩家出手頻率遠高於原回合制 (約 4~5 倍)，魔物生命以 RT_HP_MULT 倍補償，使一般魔物約 8~12 秒可擊倒
     const maxHp = Math.round(template.hp * scale * RT_HP_MULT);
     const elemNames = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
     const weakText = (template.weaknesses || []).map(w => elemNames[w] || w).join(" / ");
@@ -2990,7 +2990,7 @@ class StarfallEngine {
           hp: Math.max(35, Math.round(maxHp * 0.42)),
           maxHp: Math.max(35, Math.round(maxHp * 0.42)),
           broken: false,
-          desc: "弱點肉質(+15%傷害)，破壞胸甲可使魔物陷入 3 回合【易傷+30%】"
+          desc: "弱點肉質(+15%傷害)，破壞胸甲可使魔物陷入 6 秒【易傷+30%】"
         },
         tail: {
           key: "tail",
@@ -3057,7 +3057,7 @@ class StarfallEngine {
       this.combat.playerStatuses.regen = 2;
       this.combat.fx = { text: `星露聖域 +${healHp}HP`, color: "#4ade80", ticks: 28 };
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
-      msg = `[星靈大招] 【露米・星露聖域】恢復 +${healHp} HP、+25 MP，淨化負面狀態並賦予 2 回合再生！`;
+      msg = `[星靈大招] 【露米・星露聖域】恢復 +${healHp} HP、+25 MP，淨化負面狀態並賦予 4 秒再生！`;
     } else if (petId === "oliver") {
       const dmg = Math.max(12, Math.round(comp.atk * 1.15));
       this.combat.enemyHp = Math.max(0, this.combat.enemyHp - dmg);
@@ -3066,7 +3066,7 @@ class StarfallEngine {
       this.combat.shake = 14;
       this.combat.fx = { text: `解構光束 -${dmg} (破盾-2)`, color: "#38bdf8", ticks: 28 };
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("burst");
-      msg = `[星靈大招] 【奧利弗・弱點解構光束】造成 ${dmg} 點傷害、擊碎 2 點韌性護盾並附加 2 回合【易傷】！`;
+      msg = `[星靈大招] 【奧利弗・弱點解構光束】造成 ${dmg} 點傷害、擊碎 2 點韌性護盾並附加 4 秒【易傷】！`;
     } else if (petId === "iggy") {
       const dmg = Math.max(18, Math.round(comp.atk * 1.55));
       this.combat.enemyHp = Math.max(0, this.combat.enemyHp - dmg);
@@ -3076,7 +3076,7 @@ class StarfallEngine {
       this.combat.shake = 16;
       this.combat.fx = { text: `紅蓮龍息 -${dmg}`, color: "#fb923c", ticks: 28 };
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("burst");
-      msg = `[星靈大招] 【伊格・紅蓮龍息吐息】造成 ${dmg} 點烈焰傷害、擊碎 1 點護盾、附加 3 回合【灼燒】並 +25 極限星能！`;
+      msg = `[星靈大招] 【伊格・紅蓮龍息吐息】造成 ${dmg} 點烈焰傷害、擊碎 1 點護盾、附加 6 秒【灼燒】並 +25 極限星能！`;
     } else {
       const dmg = Math.max(16, Math.round(comp.atk * 1.35));
       this.combat.enemyHp = Math.max(0, this.combat.enemyHp - dmg);
@@ -3155,7 +3155,7 @@ class StarfallEngine {
   getCurrentIntent() {
     if (!this.combat) return null;
     if (this.combat.brokenThisTurn) {
-      return { type: "stunned", label: "[BREAK 破盾暈眩] 本回合無法行動", dmgPreview: 0 };
+      return { type: "stunned", label: "[BREAK 破盾暈眩] 暈眩中無法行動", dmgPreview: 0 };
     }
     const intent = this.combat.intents[this.combat.intentIndex % this.combat.intents.length];
     const comp = this.getComputedStats();
@@ -3239,7 +3239,7 @@ class StarfallEngine {
       this.combat.playerStatuses.vuln = 0;
       this.combat.playerStatuses.regen = 2;
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
-      this.combat.log.push(`[星輝治療] 施展【${sk.name}】，恢復 ${healAmt} HP，淨化負面狀態並獲得 2 回合再生！`);
+      this.combat.log.push(`[星輝治療] 施展【${sk.name}】，恢復 ${healAmt} HP，淨化負面狀態並獲得 4 秒再生！`);
     } else {
       const effectiveType =
         (sk.id === "slash" || sk.id === "heavy_thrust") && this.state.weaponElement
@@ -3340,7 +3340,7 @@ class StarfallEngine {
               const bonusBreakDmg = Math.max(15, Math.round(this.combat.enemyMaxHp * 0.1));
               this.combat.enemyHp = Math.max(0, this.combat.enemyHp - bonusBreakDmg);
               this.combat.log.push(
-                `[部位破壞：胸甲碎裂!] 貫穿 ${this.combat.name} 的【核心胸甲】！追加 ${bonusBreakDmg} 點部位崩壞傷害，並使其陷入 3 回合【易傷】！`
+                `[部位破壞：胸甲碎裂!] 貫穿 ${this.combat.name} 的【核心胸甲】！追加 ${bonusBreakDmg} 點部位崩壞傷害，並使其陷入 6 秒【易傷】！`
               );
             } else if (tPartKey === "tail") {
               partBreakTag = " [斷尾成功!]";
@@ -3397,7 +3397,7 @@ class StarfallEngine {
       if (sk.effect) {
         this.combat.enemyStatuses[sk.effect.type] = (this.combat.enemyStatuses[sk.effect.type] || 0) + sk.effect.turns;
         const effNames = { burn: "灼燒", weaken: "虛弱", vuln: "易傷" };
-        this.combat.log.push(`[狀態附加] 敵人陷入【${effNames[sk.effect.type]}】(${sk.effect.turns}回合)`);
+        this.combat.log.push(`[狀態附加] 敵人陷入【${effNames[sk.effect.type]}】(${sk.effect.turns * 2} 秒)`);
       }
     }
 

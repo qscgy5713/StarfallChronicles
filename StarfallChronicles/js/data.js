@@ -1003,7 +1003,7 @@ const GAME_DATA = {
       drops: [{ item: "moon_herb", chance: 0.8 }, { item: "star_shard", chance: 0.45 }],
       intents: [
         { type: "attack", mult: 1.0, label: "利爪撲擊" },
-        { type: "charge", mult: 0, buff: "atk", label: "低吼蓄勢 (下回強擊)" },
+        { type: "charge", mult: 0, buff: "atk", label: "低吼蓄勢 (下一擊強化)" },
         { type: "heavy", mult: 1.5, label: "撕裂狂噬" }
       ]
     },
