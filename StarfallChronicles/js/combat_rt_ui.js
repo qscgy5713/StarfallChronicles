@@ -176,11 +176,17 @@ const GameUIRT = {
     });
     this._setHtml($("rt-strip"), strip.join(" "));
 
+    const comboEl = $("rt-combo");
+    if (comboEl) {
+      const n = (c.rt && c.rt.combo) || 0;
+      this._setHtml(comboEl, n >= 2 ? `<b>${n}</b> 連擊` : "");
+    }
+
     this.updateRtSlots();
 
     if (this._rtLogLen !== c.log.length) {
       this._rtLogLen = c.log.length;
-      $("rt-log").innerHTML = c.log.slice(-3).map(l => `<div>${l}</div>`).join("");
+      $("rt-log").innerHTML = c.log.slice(-3).map((l, i, a) => `<div class="rt-log-line${i === a.length - 1 ? " latest" : ""}">${l}</div>`).join("");
     }
   },
 

@@ -1389,3 +1389,13 @@ body.in-combat .rt-top, body.in-combat .rt-log { display: block; }
 .q-tag.side { color: #38bdf8; background: rgba(56, 189, 248, 0.14); }
 .q-tag.done { color: #4ade80; background: rgba(74, 222, 128, 0.14); text-decoration: none; }
 .hud-log:has(.adventure-log-box:empty) { display: none !important; }
+
+/* 戰鬥紀錄：半透明底，最新一行較亮；連擊計數 */
+body.in-combat .rt-log { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+@media (max-height: 720px) { body.in-combat .rt-log { display: none; } }
+.rt-log-line { max-width: 100%; padding: 2px 10px; border-radius: 10px; background: rgba(8, 12, 22, 0.62); color: rgba(203, 213, 225, 0.7); }
+.rt-log-line.latest { color: #f1f5f9; background: rgba(8, 12, 22, 0.78); }
+.rt-combo { display: none; position: absolute; right: 18px; top: 40%; text-align: right; font-size: 15px; font-weight: 800; color: #fde68a; text-shadow: 0 0 10px rgba(250, 204, 21, 0.7), 0 2px 3px #000; pointer-events: none; }
+.rt-combo b { font-size: 34px; color: #facc15; margin-right: 4px; }
+body.in-combat .rt-combo:not(:empty) { display: block; animation: comboPop .18s ease-out; }
+@keyframes comboPop { from { transform: scale(1.5); } to { transform: scale(1); } }

@@ -259,6 +259,7 @@ const StarfallRT = {
     this.state.hp = Math.max(0, this.state.hp - dmg);
     this.state.burst = Math.min(100, this.state.burst + 12);
     rt.fleeT = 0;
+    rt.combo = 0;
     rt.freeze = Math.max(rt.freeze || 0, 0.08);
     this.rtPop(`-${dmg}`, "#ef4444", "hero", true);
     if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("hit");
@@ -465,6 +466,11 @@ const StarfallRT = {
     if (rt.freeze > 0) {
       rt.freeze -= dt;
       return;
+    }
+    // 連擊計數：3 秒內未再命中則歸零（純顯示，不影響傷害）
+    if (rt.comboT > 0) {
+      rt.comboT -= dt;
+      if (rt.comboT <= 0) rt.combo = 0;
     }
     for (const k of ["gcd", "moveCd", "dodgeCd", "potionCd", "sharpenCd", "ivT", "guardT"]) {
       if (rt[k] > 0) rt[k] = Math.max(0, rt[k] - dt);

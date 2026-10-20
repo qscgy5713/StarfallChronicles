@@ -3368,6 +3368,9 @@ class StarfallEngine {
       this.combat.projAnim = { type: effectiveType, ticks: 16 };
       if (rt) {
         this.rtPop(dmg, isCrit ? "#facc15" : isWeakness ? "#fb923c" : "#e2e8f0", "enemy", isCrit || isWeakness);
+        rt.combo = (rt.combo || 0) + 1;
+        rt.comboT = 3;
+        rt.comboBest = Math.max(rt.comboBest || 0, rt.combo);
         rt.freeze = Math.max(rt.freeze || 0, isCrit || brokeNow || partBreakTag ? 0.12 : 0.05);
       }
       this.combat.fx = {
