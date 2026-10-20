@@ -3,6 +3,8 @@
  * 100% 零 Emoji、雙階段智慧避障尋路、機關解鎖自動開門、智能戰鬥出招與章節跳轉支援
  */
 
+const RT_HP_MULT = 14;
+
 class StarfallEngine {
   constructor(data) {
     this.data = data || (typeof window !== "undefined" ? window.GAME_DATA : null);
@@ -216,6 +218,10 @@ class StarfallEngine {
   }
 
   sharpenWeapon() {
+    if (this.combat && this.combat.rt) {
+      if (this.combat.rt.sharpenCd > 0) return { ok: false, msg: "磨刀冷卻中" };
+      this.combat.rt.sharpenCd = 6;
+    }
     this.state.sharpness = 100;
     this.state.polishTurns = 2;
     if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("puzzle");
@@ -2731,6 +2737,10 @@ class StarfallEngine {
     if (this.combat && !item.usableInCombat) {
       return { ok: false, msg: "此物品無法在戰鬥中使用" };
     }
+    if (this.combat && this.combat.rt) {
+      if (this.combat.rt.potionCd > 0) return { ok: false, msg: "道具冷卻中" };
+      this.combat.rt.potionCd = 1.2;
+    }
     if (!this.combat && !item.usableInMap) {
       return { ok: false, msg: "此物品僅能在戰鬥中使用" };
     }
@@ -2779,7 +2789,6 @@ class StarfallEngine {
         this.winCombat();
         return { ok: true, msg: msgParts.join("、"), combatEnded: true };
       }
-      this.enemyTurn();
     } else {
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
       this.log(`[使用道具] 【${item.name}】：${msgParts.join("、")}`, "success");
@@ -2911,13 +2920,14 @@ class StarfallEngine {
   }
 
   // ==================== 戰術回合制戰鬥系統 (含屬性弱點克制、先制奇襲、元素共鳴連攜與星靈協同大招) ====================
-  startCombat(ev, coord, pendingMove = null) {
+  startCombat(ev, coord) {
     const template = this.data.enemies[ev.enemyId];
     if (!template) return;
 
     const scale = ev.abyssScale || 1.0;
     const comp = this.getComputedStats();
-    const maxHp = Math.round(template.hp * scale);
+    // 即時戰鬥中玩家出手頻率遠高於回合制 (約 4~5 倍)，魔物生命以 RT_HP_MULT 倍補償，使一般魔物約 8~12 秒可擊倒
+    const maxHp = Math.round(template.hp * scale * RT_HP_MULT);
     const elemNames = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
     const weakText = (template.weaknesses || []).map(w => elemNames[w] || w).join(" / ");
     const isAmbush = !!(ev.stunnedSteps && ev.stunnedSteps > 0);
@@ -2940,7 +2950,6 @@ class StarfallEngine {
 
     this.combat = {
       coord,
-      pendingMove,
       eventObj: ev,
       enemyId: ev.enemyId,
       name: template.name,
@@ -3000,8 +3009,13 @@ class StarfallEngine {
       fx: isAmbush ? { text: "AMBUSH! -15% HP", color: "#facc15", ticks: 32 } : null,
       slashAnim: 0,
       projAnim: null,
-      log: initLogs
+      log: initLogs,
+      rt: this.rtInit(coord)
     };
+    if (isAmbush) {
+      this.combat.rt.stunT = 2.2;
+      this.combat.rt.m.state = "stun";
+    }
 
     if (typeof window !== "undefined" && window.soundSystem) {
       window.soundSystem.startBGM(template.isBoss || template.isElite ? "boss" : "combat", this.state.chapter);
@@ -3020,26 +3034,6 @@ class StarfallEngine {
       window.gameUI.showToast(`[部位鎖定] 已瞄準：【${p.name}】`, "teal");
     }
     return { ok: true, part: partKey, info: p };
-  }
-
-  // 《魔物獵人》太刀「見切斬 / 緊急翻滾迴避」 ([X] 鍵觸發：閃避減傷 65% + 居合氣刃大迴旋反擊升階氣刃)
-  castForesightSlash() {
-    if (!this.combat) return { ok: false, msg: "僅能在狩獵戰鬥中施展見切迴避！" };
-    const mpCost = 10;
-    if (this.state.mp >= mpCost) {
-      this.state.mp -= mpCost;
-    }
-    this.combat.foresightStance = true;
-    this.combat.playerGuarding = true;
-    const armorGain = Math.round(this.state.maxHp * 0.16);
-    this.combat.playerArmor += armorGain;
-    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("slash");
-    this.combat.fx = { text: "見切構え! FORESIGHT", color: "#38bdf8", ticks: 26 };
-    this.combat.log.push(
-      `[太刀見切] 你擺出【見切迴避姿態】(獲得 +${armorGain} 護甲)，本回合受到魔物攻擊時將觸發無敵翻滾與【氣刃大迴旋】反擊並提升氣刃階段！`
-    );
-    this.enemyTurn();
-    return { ok: true, combatEnded: !this.combat };
   }
 
   // 星靈夥伴主動協同大招 ([C] 鍵施放，不消耗玩家出招回合)
@@ -3129,50 +3123,6 @@ class StarfallEngine {
     return { ok: true, element: nextElem, label };
   }
 
-  // 智能自動戰鬥出招 (優先挑選克制敵方弱點的戰技，並自動切換武器附魔)
-  autoBattleStep() {
-    if (!this.combat) return { ok: false };
-    const s = this.state;
-    // 斬味降至黃斬或鈍刀 (<32) 且無剛刃研磨時，優先以砥石磨刀恢復滿額紫斬
-    if ((s.polishTurns || 0) <= 0 && (typeof s.sharpness === "number" ? s.sharpness : 100) < 32) {
-      return this.sharpenWeapon();
-    }
-    if (s.hp < s.maxHp * 0.4) {
-      if (s.unlockedSkills.includes("starlight_mend") && s.mp >= 24) {
-        return this.executeSkill("starlight_mend");
-      }
-      if ((s.inventory.healing_potion || 0) > 0) {
-        return this.useItem("healing_potion");
-      }
-    }
-    if ((this.combat.companionCharge || 0) >= 100) {
-      const compRes = this.castCompanionSkill();
-      if (compRes.combatEnded) return compRes;
-    }
-    if (s.burst >= 100 && s.unlockedSkills.includes("astral_judgment")) {
-      return this.executeSkill("astral_judgment");
-    }
-    const weaks = this.combat.weaknesses || [];
-    if (weaks.length > 0 && s.weaponElement !== weaks[0]) {
-      s.weaponElement = weaks[0];
-    }
-    const offensiveSkills = ["void_pierce", "magma_eruption", "glacier_lance", "lunar_crescent", "flame_cleave", "heavy_thrust", "frost_nova", "star_bolt"];
-    for (const skId of offensiveSkills) {
-      const sk = this.data.skills[skId];
-      const effType = (skId === "slash" || skId === "heavy_thrust") ? (s.weaponElement || sk.type) : sk.type;
-      if (sk && s.unlockedSkills.includes(skId) && s.mp >= (sk.mpCost || 0) && weaks.includes(effType)) {
-        return this.executeSkill(skId);
-      }
-    }
-    for (const skId of offensiveSkills) {
-      const sk = this.data.skills[skId];
-      if (sk && s.unlockedSkills.includes(skId) && s.mp >= (sk.mpCost || 0)) {
-        return this.executeSkill(skId);
-      }
-    }
-    return this.executeSkill("slash");
-  }
-
   getCurrentIntent() {
     if (!this.combat) return null;
     if (this.combat.brokenThisTurn) {
@@ -3197,7 +3147,7 @@ class StarfallEngine {
     this.combat.enemyShield = Math.max(0, this.combat.enemyShield - amount);
     if (this.combat.enemyShield === 0 && !this.combat.brokenThisTurn) {
       this.combat.brokenThisTurn = true;
-      this.combat.breakStunPending = true;
+      if (this.combat.rt) this.combat.rt.stunT = 3.2;
       this.state.stats.shieldsBroken++;
       this.checkMilestoneAchievements();
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("break");
@@ -3219,6 +3169,20 @@ class StarfallEngine {
       return { ok: false, msg: "極限星能(Burst)未滿 100！" };
     }
 
+    const rt = this.combat.rt;
+    if (rt) {
+      if (rt.gcd > 0) return { ok: false };
+      if ((rt.cd[skillId] || 0) > 0) return { ok: false, msg: `【${sk.name}】冷卻中` };
+      if (sk.type !== "defense" && sk.type !== "heal" && this.rtHeroDist() > this.rtSkillRange(sk)) {
+        const melee = this.rtSkillRange(sk) < 2;
+        if (!melee || this.rtHeroDist() > 4.2 || !this.rtDashToMonster()) {
+          return { ok: false, msg: "距離太遠，請靠近魔物" };
+        }
+      }
+      rt.cd[skillId] = this.rtSkillCd(sk);
+      rt.gcd = 0.45;
+    }
+
     const comp = this.getComputedStats();
     if (sk.mpCost) this.state.mp -= sk.mpCost;
     if (sk.burstCost) this.state.burst = 0;
@@ -3234,6 +3198,7 @@ class StarfallEngine {
       const armorGain = Math.round(this.state.maxHp * 0.22);
       this.combat.playerArmor += armorGain;
       this.combat.playerGuarding = true;
+      if (rt) { rt.guardT = 1.1; rt.guardAge = 0; }
       this.state.mp = Math.min(this.state.maxMp, this.state.mp + 15);
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
       this.combat.log.push(`[防禦姿態] 施展【${sk.name}】，獲得 +${armorGain} 護甲並回復 15 MP（若敵方施展蓄力或強擊將觸發【完美星紋防反】）！`);
@@ -3419,189 +3384,7 @@ class StarfallEngine {
       return { ok: true, combatEnded: true };
     }
 
-    this.enemyTurn();
     return { ok: true, combatEnded: !this.combat };
-  }
-
-  enemyTurn() {
-    if (!this.combat) return;
-    const c = this.combat;
-    const comp = this.getComputedStats();
-
-    const petId = this.state.companion || "lumi";
-    if (petId === "lumi") {
-      const heal = Math.max(6, Math.round(this.state.maxHp * 0.08));
-      this.state.hp = Math.min(this.state.maxHp, this.state.hp + heal);
-      this.state.mp = Math.min(this.state.maxMp, this.state.mp + 5);
-      c.log.push(`[星靈協同] 【露米】施展微光祈福，為你恢復 +${heal} HP 與 +5 MP！`);
-    } else if (petId === "oliver") {
-      if (c.turn % 2 === 1 && c.enemyShield > 0) {
-        this.damageEnemyShield(1);
-        c.log.push(`[星靈協同] 【奧利弗】發射精密齒輪飛彈，擊碎敵人 1 點護盾！`);
-      }
-    } else if (petId === "iggy") {
-      const fireDmg = Math.max(8, Math.round(comp.atk * 0.45));
-      c.enemyHp = Math.max(0, c.enemyHp - fireDmg);
-      let burnTxt = "";
-      if (Math.random() < 0.5) {
-        c.enemyStatuses.burn = (c.enemyStatuses.burn || 0) + 2;
-        burnTxt = "並附加【灼燒】";
-      }
-      c.log.push(`[星靈協同] 【伊格】噴吐幼龍烈焰，造成 ${fireDmg} 點傷害${burnTxt}！`);
-      if (c.enemyHp <= 0) {
-        this.winCombat();
-        return;
-      }
-    } else if (petId === "sera") {
-      c.playerArmor += 16;
-      this.state.burst = Math.min(100, this.state.burst + 12);
-      c.log.push(`[星靈協同] 【瑟拉】張開星塵羽翼，賦予 +16 護甲與 +12% 極限星能！`);
-    }
-
-    if (c.enemyStatuses.burn > 0) {
-      const burnDmg = Math.max(8, Math.round(c.enemyMaxHp * 0.05));
-      c.enemyHp = Math.max(0, c.enemyHp - burnDmg);
-      c.enemyStatuses.burn--;
-      c.log.push(`[灼燒傷害] ${c.name} 受到灼燒 -${burnDmg} HP！`);
-      if (c.enemyHp <= 0) {
-        this.winCombat();
-        return;
-      }
-    }
-
-    if (c.breakStunPending) {
-      c.log.push(`[破盾暈眩] ${c.name} 因護盾粉碎而陷入暈眩，本回合無法行動且下回合持續承受 1.4 倍破盾易傷！`);
-      c.breakStunPending = false;
-      c.intentIndex = (c.intentIndex + 1) % c.intents.length;
-    } else {
-      if (c.brokenThisTurn) {
-        c.brokenThisTurn = false;
-        c.enemyShield = c.enemyMaxShield;
-        c.log.push(`[護盾重組] ${c.name} 從破盾狀態中恢復，重新凝聚了韌性護盾！`);
-      }
-      const intent = c.intents[c.intentIndex % c.intents.length];
-      if (intent.type === "charge") {
-        c.enemyStatuses.atkBuff = 2;
-        c.log.push(`[敵方蓄力] ${c.name} 發動【${intent.label}】，下回合攻擊力大幅提升！`);
-      } else if (intent.type === "shield") {
-        if (intent.heal) {
-          c.enemyHp = Math.min(c.enemyMaxHp, c.enemyHp + intent.heal);
-        }
-        c.enemyShield = Math.min(c.enemyMaxShield, c.enemyShield + (intent.shieldAdd || 1));
-        c.log.push(`[敵方防禦] ${c.name} 施展【${intent.label}】，修復了護盾${intent.heal ? `並恢復 ${intent.heal} HP` : ""}！`);
-      } else {
-        const isHeavyOrBuffed =
-          intent.type === "heavy" || (intent.mult && intent.mult >= 1.25) || c.enemyStatuses.atkBuff > 0;
-        let raw = c.enemyAtk * (intent.mult || 1.0);
-        if (c.enemyStatuses.atkBuff > 0) {
-          raw *= 1.35;
-          c.enemyStatuses.atkBuff--;
-        }
-        if (c.enemyStatuses.weaken > 0) raw *= 0.7;
-
-        let dmg = Math.max(4, raw - comp.def * 0.65);
-        if (c.playerStatuses.vuln > 0) dmg *= 1.3;
-        if (c.foresightStance) dmg *= 0.35;
-        else if (c.playerGuarding) dmg *= 0.55;
-        dmg = Math.round(dmg);
-
-        let blocked = 0;
-        if (c.playerArmor > 0) {
-          blocked = Math.min(c.playerArmor, dmg);
-          c.playerArmor -= blocked;
-          dmg -= blocked;
-        }
-
-        this.state.hp = Math.max(0, this.state.hp - dmg);
-        this.state.burst = Math.min(100, this.state.burst + 12);
-        if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("hit");
-
-        c.log.push(
-          `[敵方攻擊] ${c.name} 施展【${intent.label}】，造成 ${dmg} 點傷害${blocked > 0 ? `（護甲抵擋 ${blocked} 點）` : ""}！`
-        );
-
-        if (intent.debuff) {
-          c.playerStatuses[intent.debuff] = (c.playerStatuses[intent.debuff] || 0) + 2;
-          const dNames = { burn: "灼燒", weaken: "虛弱", vuln: "易傷" };
-          c.log.push(`[負面狀態] 你陷入了【${dNames[intent.debuff]}】狀態！`);
-        }
-
-        // 《魔物獵人》太刀「見切斬 -> 氣刃大迴旋」反擊與氣刃升階
-        if (this.state.hp > 0 && c.foresightStance) {
-          c.foresightStance = false;
-          const prevSp = this.state.spiritLevel || 0;
-          this.state.spiritLevel = Math.min(3, prevSp + 1);
-          this.recalcStats(false);
-          const spNames = ["無色刃", "白刃(+8%攻)", "黃刃(+16%攻)", "紅刃極意(+25%攻)"];
-          const counterDmg = Math.max(14, Math.round(this.getComputedStats().atk * 1.22));
-          c.enemyHp = Math.max(0, c.enemyHp - counterDmg);
-          this.damageEnemyShield(1);
-          this.state.burst = Math.min(100, this.state.burst + 22);
-          this.state.stats.foresightCounters = (this.state.stats.foresightCounters || 0) + 1;
-          c.fx = { text: `氣刃大迴旋! -${counterDmg} [${spNames[this.state.spiritLevel]}]`, color: "#f43f5e", ticks: 32 };
-          c.shake = 16;
-          c.slashAnim = 16;
-          if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("burst");
-          c.log.push(
-            `[太刀見切成功!] 你看破魔物攻勢翻滾閃避，順勢施展【氣刃大迴旋】造成 ${counterDmg} 點反擊傷害、擊碎 1 點護盾，太刀氣刃升階至【${spNames[this.state.spiritLevel]}】！`
-          );
-          if (c.enemyHp <= 0) {
-            this.winCombat();
-            return;
-          }
-        } else if (this.state.hp > 0 && c.playerGuarding && isHeavyOrBuffed) {
-          const counterDmg = Math.max(10, Math.round(comp.atk * 1.05));
-          c.enemyHp = Math.max(0, c.enemyHp - counterDmg);
-          this.damageEnemyShield(1);
-          this.state.burst = Math.min(100, this.state.burst + 20);
-          this.state.stats.perfectCounters = (this.state.stats.perfectCounters || 0) + 1;
-          c.fx = { text: `PERFECT COUNTER! -${counterDmg}`, color: "#facc15", ticks: 30 };
-          c.shake = 14;
-          if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("burst");
-          c.log.push(
-            `[完美防反 COUNTER!] 你以星紋防禦精準架開敵方強擊，瞬間回敬 ${counterDmg} 點反擊傷害、擊碎 1 點護盾並獲得 +20 極限星能！`
-          );
-          if (c.enemyHp <= 0) {
-            this.winCombat();
-            return;
-          }
-        }
-      }
-      c.intentIndex = (c.intentIndex + 1) % c.intents.length;
-    }
-
-    // 若本回合見切架勢未被魔物攻擊觸發，隨回合結束正常收招
-    if (c.foresightStance) {
-      c.foresightStance = false;
-      c.log.push(`[見切收招] 魔物本回合未發動直接攻擊，太刀見切架勢隨回合結束收招。`);
-    }
-
-    if (c.enemyStatuses.weaken > 0) c.enemyStatuses.weaken--;
-    if (c.enemyStatuses.vuln > 0) c.enemyStatuses.vuln--;
-
-    if (this.state.hp > 0) {
-      if (c.playerStatuses.regen > 0) {
-        const reg = Math.round(this.state.maxHp * 0.1);
-        this.state.hp = Math.min(this.state.maxHp, this.state.hp + reg);
-        c.playerStatuses.regen--;
-        c.log.push(`[星輝再生] 恢復 +${reg} HP。`);
-      }
-      if (c.playerStatuses.burn > 0) {
-        const bDmg = Math.max(5, Math.round(this.state.maxHp * 0.05));
-        this.state.hp = Math.max(1, this.state.hp - bDmg);
-        c.playerStatuses.burn--;
-        c.log.push(`[灼燒傷害] 你受到 -${bDmg} HP。`);
-      }
-      if (c.playerStatuses.weaken > 0) c.playerStatuses.weaken--;
-      if (c.playerStatuses.vuln > 0) c.playerStatuses.vuln--;
-
-      this.state.mp = Math.min(this.state.maxMp, this.state.mp + comp.mpRegen);
-      c.turn++;
-    }
-
-    if (this.state.hp <= 0) {
-      this.loseCombat();
-    }
   }
 
   winCombat() {
@@ -3634,12 +3417,6 @@ class StarfallEngine {
       this.activeMap[cy][cx] = ".";
     }
     this.markEventCompleted(c.coord);
-
-    if (c.pendingMove) {
-      this.state.x = c.pendingMove.x;
-      this.state.y = c.pendingMove.y;
-      this.updateFogOfWar();
-    }
 
     if (c.eventObj.winFlag) {
       this.state.flags[c.eventObj.winFlag] = true;
@@ -3731,18 +3508,9 @@ class StarfallEngine {
     }
   }
 
+  // 即時戰鬥撤退：需持續 1.6 秒不被擊中才會脫離
   fleeCombat() {
-    if (!this.combat) return false;
-    if (this.combat.isBoss) {
-      this.combat.log.push("[無法撤退] 首領戰無法撤退！");
-      return false;
-    }
-    this.combat = null;
-    if (typeof window !== "undefined" && window.soundSystem) {
-      window.soundSystem.startBGM("explore", this.state.chapter);
-    }
-    this.log("[戰術撤退] 你利用迷霧掩護成功退回安全位置。", "info");
-    return true;
+    return this.rtStartFlee();
   }
 
   getAvailableEndings() {
@@ -3869,6 +3637,13 @@ class StarfallEngine {
 if (typeof window !== "undefined") {
   window.StarfallEngine = StarfallEngine;
 }
+if (typeof module !== "undefined" && module.exports && typeof require === "function") {
+  require("./combat_rt.js");
+}
+if (typeof window !== "undefined" && window.StarfallRT) {
+  Object.assign(StarfallEngine.prototype, window.StarfallRT);
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = { StarfallEngine };
 }

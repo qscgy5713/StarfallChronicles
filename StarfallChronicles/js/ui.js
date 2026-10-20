@@ -9,8 +9,6 @@ class GameUI {
     this.px = window.pixelArt;
     this.canvas = document.getElementById("map-canvas");
     this.ctx = this.canvas ? this.canvas.getContext("2d") : null;
-    this.battleCanvas = document.getElementById("battle-canvas");
-    this.battleCtx = this.battleCanvas ? this.battleCanvas.getContext("2d") : null;
     this.tileSize = 44;
     this.logicalWidth = 960;
     this.logicalHeight = 640;
@@ -268,9 +266,6 @@ class GameUI {
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.ctx.imageSmoothingEnabled = false;
     }
-    if (this.battleCanvas && this.battleCtx) {
-      this.battleCtx.imageSmoothingEnabled = false;
-    }
   }
 
   initStaticPixelIcons() {
@@ -391,7 +386,8 @@ class GameUI {
 
   onSharpenWeaponClick() {
     if (this.engine.sharpenWeapon) {
-      this.engine.sharpenWeapon();
+      const res = this.engine.sharpenWeapon();
+      if (res && !res.ok && res.msg) this.showToast(res.msg, "warn");
     }
     this.renderAll();
   }
@@ -413,9 +409,10 @@ class GameUI {
 
   onForesightSlashClick() {
     if (this.engine.castForesightSlash) {
-      this.engine.castForesightSlash();
+      const res = this.engine.castForesightSlash();
+      if (res && !res.ok && res.msg) this.showToast(res.msg, "warn");
     }
-    this.renderAll();
+    if (!this.engine.combat) this.renderAll();
   }
 
   screenToTile(clientX, clientY) {
@@ -529,21 +526,7 @@ class GameUI {
       }
 
       if (this.engine.combat) {
-        if (e.key === "c" || e.key === "C") {
-          e.preventDefault();
-          this.onCompanionSkillClick();
-          return;
-        }
-        if (e.key === "x" || e.key === "X") {
-          e.preventDefault();
-          this.onForesightSlashClick();
-          return;
-        }
-        const idx = parseInt(e.key, 10) - 1;
-        if (idx >= 0 && idx < this.engine.state.unlockedSkills.length) {
-          e.preventDefault();
-          this.onCombatSkillClick(this.engine.state.unlockedSkills[idx]);
-        }
+        this.handleCombatKey(e);
         return;
       }
 
@@ -573,15 +556,8 @@ class GameUI {
       }
     });
 
-    if (this.battleCanvas) {
-      this.battleCanvas.addEventListener("click", e => {
-        if (!this.engine.combat || !this.mh3d) return;
-        const rect = this.battleCanvas.getBoundingClientRect();
-        const lx = (e.clientX - rect.left) * (this.battleCanvas.width / rect.width);
-        const ly = (e.clientY - rect.top) * (this.battleCanvas.height / rect.height);
-        this.mh3d.handleBattleCanvasClick(lx, ly);
-      });
-    }
+    window.addEventListener("keyup", e => this.handleCombatKeyUp(e));
+    window.addEventListener("blur", () => { this._rtDirs = []; });
 
     if (this.canvas) {
       this.canvas.addEventListener("mousemove", e => {
@@ -669,12 +645,13 @@ class GameUI {
   }
 
   startAnimationLoop() {
-    const loop = () => {
+    let last = performance.now();
+    const loop = now => {
+      const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+      last = now;
       this.animFrame++;
+      this.rtTick(dt);
       this.drawCanvas();
-      if (this.engine.combat) {
-        this.drawBattleScene();
-      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -698,7 +675,8 @@ class GameUI {
 
     // 若處於《魔物獵人》3D 狩獵視角 (3d_shoulder 或 3d_orbit) 且非全景地圖，使用 MH3DRenderer 繪製 3D 透視世界
     const viewMode = this.engine.state.viewMode || "3d_shoulder";
-    if (!this.engine.state.fullMapView && viewMode !== "2d_pixel" && this.mh3d) {
+    // 即時戰鬥固定使用 2D 畫面 (預警範圍與走位以格子呈現)
+    if (!this.engine.state.fullMapView && viewMode !== "2d_pixel" && this.mh3d && !this.engine.combat) {
       this.mh3d.draw3DWorld(ctx, this.logicalWidth, this.logicalHeight, this.animFrame);
       this.drawMinimap(ctx, map, expMap, obj, ts);
       return;
@@ -712,8 +690,17 @@ class GameUI {
       this.camY = -Math.floor((this.logicalHeight - mapPixelH) / 2);
     } else {
       // 鏡頭永遠以主角為中心（不再限制於地圖邊界內），地圖邊緣以外顯示為背景
-      const targetX = this.engine.state.x * ts + ts / 2 - this.logicalWidth / 2;
-      const targetY = this.engine.state.y * ts + ts / 2 - this.logicalHeight / 2;
+      // 主角顯示位置平滑追隨邏輯格 (即時戰鬥與探索皆適用)
+      if (typeof this._hx !== "number" || Math.hypot(this._hx - this.engine.state.x, this._hy - this.engine.state.y) > 4) {
+        this._hx = this.engine.state.x;
+        this._hy = this.engine.state.y;
+      }
+      this._hx += (this.engine.state.x - this._hx) * 0.4;
+      this._hy += (this.engine.state.y - this._hy) * 0.4;
+      if (Math.abs(this.engine.state.x - this._hx) < 0.01) this._hx = this.engine.state.x;
+      if (Math.abs(this.engine.state.y - this._hy) < 0.01) this._hy = this.engine.state.y;
+      const targetX = this._hx * ts + ts / 2 - this.logicalWidth / 2;
+      const targetY = this._hy * ts + ts / 2 - this.logicalHeight / 2;
       if (!this._camInit) {
         this.camX = targetX;
         this.camY = targetY;
@@ -725,8 +712,13 @@ class GameUI {
       if (Math.abs(targetY - this.camY) < 0.5) this.camY = targetY;
     }
 
-    const ox = -Math.round(this.camX);
-    const oy = -Math.round(this.camY);
+    let ox = -Math.round(this.camX);
+    let oy = -Math.round(this.camY);
+    const combatNow = this.engine.combat;
+    if (combatNow && combatNow.shake > 1) {
+      ox += Math.round((Math.random() - 0.5) * combatNow.shake * 0.5);
+      oy += Math.round((Math.random() - 0.5) * combatNow.shake * 0.5);
+    }
 
     ctx.fillStyle = "#0a1410";
     ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
@@ -739,12 +731,11 @@ class GameUI {
         for (let gx = gx0; gx <= gx1; gx++) {
           if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) continue;
           this.px.drawTerrainTile(ctx, "#", this.engine.state.chapter, gx, gy, gx * ts + ox, gy * ts + oy, ts, this.animFrame, {});
-          ctx.fillStyle = "rgba(8, 14, 12, 0.68)";
-          ctx.fillRect(gx * ts + ox, gy * ts + oy, ts, ts);
         }
       }
     }
 
+    const fogAlpha = new Float32Array(rows * cols);
     for (let y = 0; y < rows; y++) {
       const py = y * ts + oy;
       if (py + ts < 0 || py > this.logicalHeight) continue;
@@ -772,18 +763,44 @@ class GameUI {
           ctx.fillRect(px, py, ts, Math.max(4, Math.round(ts * 0.2)));
         }
 
-        if (explored) {
+        // 即時戰鬥中魔物以獨立實體繪製，原始格不重複畫
+        const isCombatOrigin = combatNow && combatNow.rt && x === combatNow.rt.ox && y === combatNow.rt.oy;
+        if (explored && !isCombatOrigin) {
           this.drawPixelTileObject(ctx, tile, x, y, px, py, ts, frame2);
         }
 
-        if (!explored) {
-          ctx.fillStyle = "rgba(14, 22, 34, 0.93)";
-          ctx.fillRect(px, py, ts, ts);
-        } else if (!visible) {
-          ctx.fillStyle = "rgba(20, 30, 50, 0.3)";
-          ctx.fillRect(px, py, ts, ts);
+        fogAlpha[y * cols + x] = !explored ? 0.93 : !visible ? 0.3 : 0;
+      }
+    }
+
+    // 統一陰影層：所有地形與物件畫完後，以低解析遮罩雙線性放大鋪上，
+    // 讓迷霧/世界邊緣的暗部柔和漸變，且能完整覆蓋向上延伸的樹冠
+    {
+      const fgx0 = Math.floor(-ox / ts) - 1, fgx1 = Math.ceil((this.logicalWidth - ox) / ts) + 1;
+      const fgy0 = Math.floor(-oy / ts) - 1, fgy1 = Math.ceil((this.logicalHeight - oy) / ts) + 3;
+      const mw = fgx1 - fgx0 + 1, mh = fgy1 - fgy0 + 1;
+      if (!this._fogMask || this._fogMask.width !== mw || this._fogMask.height !== mh) {
+        this._fogMask = document.createElement("canvas");
+        this._fogMask.width = mw;
+        this._fogMask.height = mh;
+      }
+      const mctx = this._fogMask.getContext("2d");
+      mctx.clearRect(0, 0, mw, mh);
+      for (let j = 0; j < mh; j++) {
+        for (let i = 0; i < mw; i++) {
+          const gx = fgx0 + i, gy = fgy0 + j;
+          const inMap = gx >= 0 && gx < cols && gy >= 0 && gy < rows;
+          const a = inMap ? fogAlpha[gy * cols + gx] : (this.engine.state.fullMapView ? 0 : 0.7);
+          if (a > 0) {
+            mctx.fillStyle = `rgba(12, 20, 30, ${a})`;
+            mctx.fillRect(i, j, 1, 1);
+          }
         }
       }
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(this._fogMask, 0, 0, mw, mh, fgx0 * ts + ox, fgy0 * ts + oy, mw * ts, mh * ts);
+      ctx.restore();
     }
 
     // 環境動態：陽光光束與章節粒子（花瓣/浪花/餘燼/雪/紫光微粒）
@@ -841,8 +858,8 @@ class GameUI {
       ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "lighter";
-      const hxp = this.engine.state.x * ts + ts / 2 + ox;
-      const hyp = this.engine.state.y * ts + ts / 2 + oy;
+      const hxp = (this._hx ?? this.engine.state.x) * ts + ts / 2 + ox;
+      const hyp = (this._hy ?? this.engine.state.y) * ts + ts / 2 + oy;
       const hg = ctx.createRadialGradient(hxp, hyp, ts * 0.3, hxp, hyp, ts * 6);
       hg.addColorStop(0, `rgba(${lightC},0.22)`);
       hg.addColorStop(1, `rgba(${lightC},0)`);
@@ -905,8 +922,9 @@ class GameUI {
     }
 
     // 繪製主角與隨行星靈夥伴（含 HD-2D 點光源光暈、腳底落影與武器五屬性附魔星環）
-    const hx = this.engine.state.x * ts + ox;
-    const hy = this.engine.state.y * ts + oy;
+    if (combatNow && combatNow.rt) this.drawRtMonster(ctx, ts, ox, oy, frame2);
+    const hx = (this._hx ?? this.engine.state.x) * ts + ox;
+    const hy = (this._hy ?? this.engine.state.y) * ts + oy;
     const hCenterX = hx + ts / 2;
     const hCenterY = hy + ts / 2;
 
@@ -937,7 +955,19 @@ class GameUI {
     ctx.ellipse(hx + ts / 2, hy + ts - 4, ts * 0.4, ts * 0.14, 0, 0, Math.PI * 2);
     ctx.stroke();
 
+    // 即時戰鬥：翻滾無敵時半透明閃爍，受擊時紅閃
+    const rtc = combatNow && combatNow.rt;
+    const hpNow = this.engine.state.hp;
+    if (rtc && typeof this._lastHeroHp === "number" && hpNow < this._lastHeroHp) this._heroHitTicks = 16;
+    this._lastHeroHp = hpNow;
+    ctx.save();
+    if (rtc && rtc.ivT > 0) ctx.globalAlpha = this.animFrame % 4 < 2 ? 0.35 : 0.7;
+    if (this._heroHitTicks > 0) {
+      ctx.filter = this._heroHitTicks % 4 < 2 ? "brightness(2.2) sepia(1) saturate(6) hue-rotate(-30deg)" : "none";
+      this._heroHitTicks--;
+    }
     this.px.drawSprite(ctx, frame2 ? "hero_1" : "hero_0", hx + 3, hy + 3, ts - 6);
+    ctx.restore();
 
     const petObj = this.engine.data.companions[this.engine.state.companion || "lumi"];
     if (petObj) {
@@ -945,6 +975,8 @@ class GameUI {
       const petSz = Math.max(16, Math.round(ts * 0.52));
       this.px.drawSprite(ctx, petObj.icon, hx + ts - petSz + 2, hy - 4 + petBob, petSz);
     }
+
+    if (combatNow && combatNow.rt) this.drawRtEffects(ctx, ts, ox, oy);
 
     // 近景跟隨視角下的 HD-2D 柔和暗角 (Atmospheric Vignette)
     if (!this.engine.state.fullMapView) {
@@ -1223,7 +1255,18 @@ class GameUI {
         break;
       case "E": {
         const en = ev && this.engine.data.enemies[ev.enemyId];
-        this.px.drawSprite(ctx, en ? en.icon : "enemy_wolf", px + 3, py + 3 - frame2, ts - 6);
+        if (en && en.isElite) {
+          // 精英：放大 1.25 倍並加橘色光環，與普通魔物一眼區分
+          const es = (ts - 6) * 1.25;
+          ctx.strokeStyle = "rgba(251, 146, 60, 0.9)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(cx, py + ts * 0.9, ts * 0.42, ts * 0.12, 0, 0, Math.PI * 2);
+          ctx.stroke();
+          this.px.drawSprite(ctx, en.icon, cx - es / 2, py + ts * 0.94 - es - frame2, es);
+        } else {
+          this.px.drawSprite(ctx, en ? en.icon : "enemy_wolf", px + 3, py + 3 - frame2, ts - 6);
+        }
         if (ev && ev.stunnedSteps > 0) {
           ctx.strokeStyle = "#facc15";
           ctx.lineWidth = 2;
@@ -1238,7 +1281,8 @@ class GameUI {
         bGlow.addColorStop(1, "rgba(0, 0, 0, 0)");
         ctx.fillStyle = bGlow;
         ctx.fillRect(px - ts * 0.4, py - ts * 0.4, ts * 1.8, ts * 1.8);
-        this.px.drawSprite(ctx, bo ? bo.icon : "boss_behemoth", px + 1, py + 1 - frame2, ts - 2);
+        const bs = ts * 1.45;
+        this.px.drawSprite(ctx, bo ? bo.icon : "boss_behemoth", cx - bs / 2, py + ts * 0.96 - bs - frame2, bs);
         if (ev && ev.stunnedSteps > 0) {
           ctx.strokeStyle = "#facc15";
           ctx.lineWidth = 2;
@@ -1258,253 +1302,12 @@ class GameUI {
     }
   }
 
-  drawBattleScene() {
-    if (!this.battleCtx || !this.battleCanvas || !this.engine.combat || !this.px) return;
-    const ctx = this.battleCtx;
-    const c = this.engine.combat;
-    const w = this.battleCanvas.width;
-    const h = this.battleCanvas.height;
-
-    if (this.mh3d && (this.engine.state.viewMode || "3d_shoulder") !== "2d_pixel") {
-      this.mh3d.draw3DBattleScene(ctx, w, h, this.animFrame);
-      return;
-    }
-
-    const frame2 = Math.floor(this.animFrame / 20) % 2;
-    const chNum = this.engine.state.chapter || 1;
-    const horizonY = h - 48;
-
-    // 偵測主角受傷（生命下降）→ 觸發主角受擊閃爍與魔物撲擊
-    const hpNow = this.engine.state.hp;
-    if (typeof this._lastHeroHp === "number" && hpNow < this._lastHeroHp) {
-      this._heroHitTicks = 18;
-      this._enemyLungeTicks = 18;
-    }
-    this._lastHeroHp = hpNow;
-
-    ctx.clearRect(0, 0, w, h);
-
-    // 1. 章節日景：天空、太陽、雲、遠山
-    const skyThemes = {
-      1: { top: "#3f8fe0", bot: "#bfe3f2", sun: "255,252,225", mount: "rgba(88,128,150,0.6)", far: "#2f7a3a" },
-      2: { top: "#2f86d6", bot: "#c9ecf5", sun: "255,250,235", mount: "rgba(96,140,170,0.55)", far: "#3a8a8c" },
-      3: { top: "#d9531e", bot: "#fcd9a0", sun: "255,236,190", mount: "rgba(130,60,40,0.6)", far: "#7a3d22" },
-      4: { top: "#6fb1ee", bot: "#eef6fc", sun: "255,255,245", mount: "rgba(190,210,232,0.75)", far: "#9db9d3" },
-      5: { top: "#5b2a86", bot: "#ffb784", sun: "255,190,120", mount: "rgba(70,30,70,0.65)", far: "#5a2e55" }
-    };
-    const sk = skyThemes[chNum] || skyThemes[1];
-    const bio = this.px.getBiome2D(chNum);
-
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
-    skyGrad.addColorStop(0, sk.top);
-    skyGrad.addColorStop(1, sk.bot);
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, w, horizonY);
-
-    const sunX = w * 0.68;
-    const sunGrad = ctx.createRadialGradient(sunX, horizonY - 20, 4, sunX, horizonY - 20, 190);
-    sunGrad.addColorStop(0, `rgba(${sk.sun},0.95)`);
-    sunGrad.addColorStop(0.35, `rgba(${sk.sun},0.3)`);
-    sunGrad.addColorStop(1, `rgba(${sk.sun},0)`);
-    ctx.fillStyle = sunGrad;
-    ctx.fillRect(0, 0, w, horizonY + 10);
-
-    ctx.fillStyle = chNum === 3 ? "rgba(90,40,30,0.4)" : chNum === 5 ? "rgba(255,170,150,0.5)" : "rgba(255,255,255,0.78)";
-    for (let i = 0; i < 5; i++) {
-      const cx = ((i * 211 + this.animFrame * 0.18) % (w + 200)) - 100;
-      const cy = 14 + (i * 23) % Math.max(20, horizonY - 56);
-      [[0, 0, 40, 11], [-28, 4, 26, 9], [30, 5, 30, 10], [6, -7, 24, 10]].forEach(([ox, oy, rx, ry]) => {
-        ctx.beginPath(); ctx.ellipse(cx + ox, cy + oy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
-      });
-    }
-
-    ctx.fillStyle = sk.mount;
-    ctx.beginPath();
-    ctx.moveTo(0, horizonY);
-    for (let mx = 0; mx <= w + 40; mx += 40) {
-      ctx.lineTo(mx, horizonY - 24 - Math.abs(Math.sin(mx * 0.012 + chNum * 1.7)) * 44);
-    }
-    ctx.lineTo(w, horizonY);
-    ctx.closePath();
-    ctx.fill();
-
-    // 2. 章節遠景植被 / 地物
-    for (let i = 0; i < 16; i++) {
-      const bx = i * 58 + ((i * 17) % 20);
-      const bh = 22 + ((i * 19 + chNum * 11) % 26);
-      const by = horizonY;
-      if (chNum === 1) {
-        ctx.fillStyle = "#1f6b34";
-        ctx.beginPath(); ctx.arc(bx, by - bh, 18, 0, Math.PI * 2); ctx.arc(bx + 14, by - bh + 6, 14, 0, Math.PI * 2); ctx.arc(bx - 13, by - bh + 7, 13, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#5a3a1a"; ctx.fillRect(bx - 3, by - bh + 8, 6, bh - 8);
-      } else if (chNum === 2) {
-        ctx.strokeStyle = "#8b5a2b"; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + 6, by - bh * 0.6, bx + 2, by - bh); ctx.stroke();
-        ctx.strokeStyle = "#2f9e44"; ctx.lineWidth = 3;
-        for (let k = 0; k < 5; k++) { const a = -Math.PI + (k / 4) * Math.PI; ctx.beginPath(); ctx.moveTo(bx + 2, by - bh); ctx.quadraticCurveTo(bx + 2 + Math.cos(a) * 14, by - bh + Math.sin(a) * 10 - 4, bx + 2 + Math.cos(a) * 22, by - bh + Math.sin(a) * 4 + 8); ctx.stroke(); }
-      } else if (chNum === 3) {
-        ctx.fillStyle = "#4a2a1c";
-        ctx.beginPath(); ctx.moveTo(bx - 14, by); ctx.lineTo(bx - 3, by - bh * 1.3); ctx.lineTo(bx + 4, by - bh * 0.7); ctx.lineTo(bx + 14, by); ctx.closePath(); ctx.fill();
-      } else if (chNum === 4) {
-        ctx.fillStyle = "#2f6f55";
-        for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(bx - 14 + k * 3, by - k * 11); ctx.lineTo(bx, by - bh - k * 11 + 8); ctx.lineTo(bx + 14 - k * 3, by - k * 11); ctx.closePath(); ctx.fill(); }
-        ctx.fillStyle = "#ffffff"; ctx.fillRect(bx - 2, by - bh - 22, 4, 3);
-      } else {
-        ctx.fillStyle = "#8b46f0";
-        ctx.beginPath(); ctx.moveTo(bx - 8, by); ctx.lineTo(bx - 8, by - bh * 0.8); ctx.lineTo(bx, by - bh * 1.1); ctx.lineTo(bx + 8, by - bh * 0.8); ctx.lineTo(bx + 8, by); ctx.closePath(); ctx.fill();
-      }
-    }
-
-    // 3. 地面：章節地表色 + 雜訊 + 透視線
-    const floorGrad = ctx.createLinearGradient(0, horizonY, 0, h);
-    floorGrad.addColorStop(0, bio.groundAlt);
-    floorGrad.addColorStop(1, bio.dark);
-    ctx.fillStyle = floorGrad;
-    ctx.fillRect(0, horizonY, w, h - horizonY);
-    for (let i = 0; i < 70; i++) {
-      const nx = (i * 97 + 13) % w;
-      const ny = horizonY + 6 + ((i * 53) % (h - horizonY - 8));
-      ctx.fillStyle = i % 4 === 0 ? bio.fleck[i % bio.fleck.length] : "rgba(0,0,0,0.12)";
-      ctx.fillRect(nx, ny, i % 4 === 0 ? 3 : 2, 2);
-    }
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
-    ctx.lineWidth = 1;
-    for (let gx = -120; gx <= w + 120; gx += 64) {
-      ctx.beginPath();
-      ctx.moveTo(w / 2 + (gx - w / 2) * 0.55, horizonY);
-      ctx.lineTo(gx, h);
-      ctx.stroke();
-    }
-    const hz = ctx.createLinearGradient(0, horizonY - 6, 0, horizonY + 14);
-    hz.addColorStop(0, "rgba(255,255,255,0)");
-    hz.addColorStop(0.5, `rgba(${sk.sun},0.35)`);
-    hz.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = hz;
-    ctx.fillRect(0, horizonY - 6, w, 20);
-
-    // 5. 繪製主角、星靈夥伴與腳底光環落影
-    const heroLunge = c.slashAnim > 0 ? 38 : 0;
-    const heroBob = Math.sin(this.animFrame * 0.1) * 2;
-    const heroHit = this._heroHitTicks > 0;
-    const hx = 120 + heroLunge + (heroHit ? (Math.random() - 0.5) * 8 : 0);
-    const hy = h - 122 + heroBob;
-
-    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-    ctx.beginPath();
-    ctx.ellipse(hx + 40, h - 44, 34, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    if (!(heroHit && this._heroHitTicks % 4 < 2)) {
-      this.px.drawSprite(ctx, frame2 ? "hero_1" : "hero_0", hx, hy, 80);
-    }
-    if (heroHit) {
-      ctx.strokeStyle = "#fecaca";
-      ctx.lineWidth = 3;
-      for (let k = 0; k < 6; k++) {
-        const ang = k * 1.05 + this._heroHitTicks * 0.3;
-        ctx.beginPath();
-        ctx.moveTo(hx + 40 + Math.cos(ang) * 14, hy + 40 + Math.sin(ang) * 14);
-        ctx.lineTo(hx + 40 + Math.cos(ang) * 34, hy + 40 + Math.sin(ang) * 34);
-        ctx.stroke();
-      }
-      this._heroHitTicks--;
-    }
-
-    const petObj = this.engine.data.companions[this.engine.state.companion || "lumi"];
-    if (petObj) {
-      const bob = Math.sin(this.animFrame * 0.15) * 4;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
-      ctx.beginPath();
-      ctx.ellipse(82, h - 46, 20, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      this.px.drawSprite(ctx, petObj.icon, 58, h - 102 + bob, 48);
-    }
-
-    // 6. 繪製敵人 / 首領、腳底陰影與韌性護盾能量罩
-    const shakeX = c.shake > 0 ? (Math.random() - 0.5) * 16 : 0;
-    const shakeY = c.shake > 0 ? (Math.random() - 0.5) * 10 : 0;
-    if (c.shake > 0) c.shake--;
-
-    const bossSize = c.isBoss ? 112 : 92;
-    let lungeX = 0;
-    if (this._enemyLungeTicks > 0) {
-      lungeX = -Math.sin(((18 - this._enemyLungeTicks) / 18) * Math.PI) * 120;
-      this._enemyLungeTicks--;
-    }
-    const enemyX = w - 230 + shakeX + lungeX;
-    const enemyY = (c.isBoss ? h - 148 : h - 130) + shakeY + Math.sin(this.animFrame * 0.09) * 3;
-
-    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-    ctx.beginPath();
-    ctx.ellipse(enemyX + bossSize / 2, h - 42, bossSize * 0.42, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (c.enemyShield > 0 && !c.brokenThisTurn) {
-      ctx.save();
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.45)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(enemyX + bossSize / 2, enemyY + bossSize / 2, bossSize * 0.56, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    const hurtFlash = c.shake > 0 && "filter" in ctx;
-    if (hurtFlash) ctx.filter = "brightness(2.1)";
-    this.px.drawSprite(ctx, c.icon || "enemy_wolf", enemyX, enemyY, bossSize);
-    if (hurtFlash) ctx.filter = "none";
-
-    // 7. 繪製五屬性專屬技能彈道與雙重交叉斬擊像素光束
-    if (c.slashAnim > 0) {
-      const prog = (16 - c.slashAnim) / 16;
-      const projX = 200 + prog * (w - 380);
-      const pType = c.projAnim && c.projAnim.type ? c.projAnim.type : "physical";
-      const beamColors = {
-        physical: ["#facc15", "#fef08a"],
-        star: ["#38bdf8", "#e0f2fe"],
-        fire: ["#ea580c", "#fde047"],
-        frost: ["#0284c7", "#bae6fd"],
-        void: ["#9333ea", "#f3e8ff"],
-        ultimate: ["#f43f5e", "#fef08a"]
-      };
-      const [mainCol, coreCol] = beamColors[pType] || beamColors.physical;
-
-      ctx.fillStyle = mainCol;
-      ctx.fillRect(projX - 6, enemyY + 32, 32, 12);
-      ctx.fillStyle = coreCol;
-      ctx.fillRect(projX, enemyY + 35, 22, 6);
-
-      ctx.strokeStyle = mainCol;
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.moveTo(enemyX + 4, enemyY + 8);
-      ctx.lineTo(enemyX + bossSize - 4, enemyY + bossSize - 8);
-      ctx.moveTo(enemyX + bossSize - 8, enemyY + 10);
-      ctx.lineTo(enemyX + 8, enemyY + bossSize - 10);
-      ctx.stroke();
-
-      ctx.strokeStyle = coreCol;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      c.slashAnim--;
-    }
-
-    if (c.fx && c.fx.ticks > 0) {
-      ctx.font = "bold 22px 'Courier New', monospace";
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#090d16";
-      ctx.fillText(c.fx.text, w - 172, enemyY - 8 - (30 - c.fx.ticks) + 2);
-      ctx.fillStyle = c.fx.color || "#facc15";
-      ctx.fillText(c.fx.text, w - 174, enemyY - 8 - (30 - c.fx.ticks));
-      c.fx.ticks--;
-    }
-  }
-
   renderAll() {
     this.renderHUD();
     this.renderGuideBanner();
     this.renderCompanionWidget();
     this.renderObjectiveTracker();
-    this.renderCombatOverlay();
+    this.syncCombatMode();
     this.renderQuickInventory();
   }
 
@@ -1766,231 +1569,6 @@ class GameUI {
         </button>`
       )
       .join("");
-  }
-
-  renderCombatOverlay() {
-    const overlay = document.getElementById("combat-overlay");
-    if (!overlay) return;
-    const c = this.engine.combat;
-    if (!c) {
-      overlay.classList.remove("active");
-      return;
-    }
-
-    overlay.classList.add("active");
-    document.getElementById("combat-enemy-name").textContent = c.name;
-    document.getElementById("combat-enemy-icon").innerHTML = this.px.icon(c.icon, 26);
-    document.getElementById("combat-turn-num").textContent = `第 ${c.turn} 回合`;
-
-    const eHpPct = Math.max(0, Math.min(100, Math.round((c.enemyHp / c.enemyMaxHp) * 100)));
-    document.getElementById("combat-enemy-hp-bar").style.width = `${eHpPct}%`;
-    document.getElementById("combat-enemy-hp-text").textContent = `${c.enemyHp} / ${c.enemyMaxHp}`;
-
-    let shieldHtml = "";
-    for (let i = 0; i < c.enemyMaxShield; i++) {
-      shieldHtml += `<span class="shield-pip ${i < c.enemyShield ? "filled" : "empty"}">${this.px.icon("icon_def", 16)}</span>`;
-    }
-    document.getElementById("combat-enemy-shields").innerHTML = shieldHtml;
-
-    const intent = this.engine.getCurrentIntent();
-    const intentEl = document.getElementById("combat-enemy-intent");
-    if (intent) {
-      intentEl.innerHTML = `下回合意圖：<strong>${intent.label}</strong> ${
-        intent.dmgPreview > 0 ? `<span class="dmg-tag">(預估傷害 ${intent.dmgPreview})</span>` : ""
-      }`;
-    }
-
-    const elemNames = { physical: "物理", arcane: "星芒", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
-    const eStatusArr = [];
-    if (c.enraged) {
-      eStatusArr.push(`<span class="status-pill burn">[紅蓮憤怒狀態]</span>`);
-    }
-    if (c.weaknesses && c.weaknesses.length > 0) {
-      const wLabels = c.weaknesses.map(w => elemNames[w] || w).join("/");
-      eStatusArr.push(`<span class="status-pill vuln">[弱點屬性: ${wLabels}]</span>`);
-    }
-    if (c.brokenThisTurn) eStatusArr.push(`<span class="status-pill break">[BREAK 破盾易傷 +40%]</span>`);
-    if (c.enemyStatuses.burn > 0) eStatusArr.push(`<span class="status-pill burn">[灼燒 ${c.enemyStatuses.burn}]</span>`);
-    if (c.enemyStatuses.weaken > 0) eStatusArr.push(`<span class="status-pill weaken">[虛弱 ${c.enemyStatuses.weaken}]</span>`);
-    if (c.enemyStatuses.vuln > 0) eStatusArr.push(`<span class="status-pill vuln">[易傷 ${c.enemyStatuses.vuln}]</span>`);
-    if (c.enemyStatuses.atkBuff > 0) eStatusArr.push(`<span class="status-pill buff">[蓄力強化]</span>`);
-
-    // 《魔物獵人》三部位破壞鎖定按鈕列 (頭部 / 軀幹 / 尾巴)
-    if (c.parts) {
-      const partBtns = ["head", "body", "tail"]
-        .map(pk => {
-          const p = c.parts[pk];
-          if (!p) return "";
-          const active = (c.targetPart || "body") === pk;
-          const pct = Math.max(0, Math.round((p.hp / p.maxHp) * 100));
-          const statusTxt = p.broken ? "已破壞!" : `${pct}%`;
-          return `<button class="btn-sm ${active ? "btn-accent" : "btn-secondary"}"
-            style="padding:2px 8px;font-size:11px;border-color:${active ? "#facc15" : "#475569"};"
-            title="${p.desc}"
-            onclick="window.gameUI.onSelectMonsterPartClick('${pk}')">
-            [鎖定:${p.name}] ${statusTxt}
-          </button>`;
-        })
-        .join(" ");
-      eStatusArr.push(`<span style="display:inline-flex;gap:4px;align-items:center;margin-left:4px;">${partBtns}</span>`);
-    }
-    document.getElementById("combat-enemy-statuses").innerHTML = eStatusArr.join(" ");
-
-    const s = this.engine.state;
-    const petObj = this.engine.data.companions[s.companion || "lumi"];
-    document.getElementById("combat-player-hp").textContent = `${s.hp}/${s.maxHp}`;
-    document.getElementById("combat-player-mp").textContent = `${s.mp}/${s.maxMp}`;
-    document.getElementById("combat-player-armor").textContent = c.playerArmor;
-    document.getElementById("combat-player-burst").textContent = `${s.burst}%`;
-
-    const pStatusArr = [];
-    if (petObj) pStatusArr.push(`<span class="status-pill regen">${petObj.name.split("・")[1]}同行</span>`);
-    if (this.engine.getSharpnessTierInfo) {
-      const sh = this.engine.getSharpnessTierInfo();
-      pStatusArr.push(`<span class="status-pill buff" style="border-color:${sh.color};color:${sh.color};">[斬味:${sh.label} x${sh.mult}]</span>`);
-    }
-    const spNames = ["無色刃", "白刃+8%", "黃刃+16%", "紅刃+25%"];
-    if ((s.spiritLevel || 0) > 0) {
-      pStatusArr.push(`<span class="status-pill burn">[太刀氣刃:${spNames[s.spiritLevel]}]</span>`);
-    }
-    if (c.foresightStance) {
-      pStatusArr.push(`<span class="status-pill armor">[見切迴避構え!]</span>`);
-    }
-    if (c.lastElement) {
-      const elemNamesMap = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空", ultimate: "終極" };
-      pStatusArr.push(`<span class="status-pill vuln">[前招:${elemNamesMap[c.lastElement] || c.lastElement} -> 異屬性連攜可觸發!]</span>`);
-    }
-    if (c.playerArmor > 0) pStatusArr.push(`<span class="status-pill armor">[護甲 ${c.playerArmor}]</span>`);
-    if (c.playerStatuses.regen > 0) pStatusArr.push(`<span class="status-pill regen">[再生 ${c.playerStatuses.regen}]</span>`);
-    if (c.playerStatuses.burn > 0) pStatusArr.push(`<span class="status-pill burn">[灼燒 ${c.playerStatuses.burn}]</span>`);
-    if (c.playerStatuses.weaken > 0) pStatusArr.push(`<span class="status-pill weaken">[虛弱 ${c.playerStatuses.weaken}]</span>`);
-    if (c.playerStatuses.vuln > 0) pStatusArr.push(`<span class="status-pill vuln">[易傷 ${c.playerStatuses.vuln}]</span>`);
-    document.getElementById("combat-player-statuses").innerHTML = pStatusArr.join(" ");
-
-    const elemLabelMap = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
-    const skillsGrid = document.getElementById("combat-skills-grid");
-    skillsGrid.innerHTML = s.unlockedSkills
-      .map((skId, idx) => {
-        const sk = this.engine.data.skills[skId];
-        if (!sk) return "";
-        const disabled =
-          (sk.mpCost && s.mp < sk.mpCost) ||
-          (sk.burstCost && s.burst < sk.burstCost);
-        const effType = (sk.id === "slash" || sk.id === "heavy_thrust") && s.weaponElement ? s.weaponElement : sk.type;
-        const isWeakHit = (c.weaknesses && c.weaknesses.includes(effType)) || (sk.type === "ultimate" && c.enemyShield > 0);
-        const isComboReady = c.lastElement && sk.type !== "defense" && sk.type !== "heal" && c.lastElement !== effType;
-        const elemBadgeText = (sk.id === "slash" || sk.id === "heavy_thrust") && s.weaponElement
-          ? `${elemLabelMap[s.weaponElement] || s.weaponElement}附魔`
-          : sk.elementLabel;
-        const elemBadge = elemBadgeText ? `<span class="badge-cnt">${elemBadgeText}</span>` : "";
-        const weakBadge = isWeakHit ? `<span style="color:#facc15;font-size:11px;font-weight:800;">[弱點克制!]</span>` : "";
-        const comboBadge = isComboReady ? `<span style="color:#c084fc;font-size:11px;font-weight:800;">[元素共鳴!]</span>` : "";
-        const costTag = sk.burstCost
-          ? `需 ${sk.burstCost}% 極限`
-          : sk.mpCost > 0
-          ? `消耗 ${sk.mpCost} MP`
-          : `回復 MP`;
-        return `
-          <button class="combat-skill-btn ${sk.type === "ultimate" ? "ult-btn" : ""}"
-                  ${disabled ? "disabled" : ""}
-                  onclick="window.gameUI.onCombatSkillClick('${sk.id}')">
-            <div class="sk-top">
-              <span class="sk-name" style="display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;">
-                <span class="badge-cnt">[${idx + 1}]</span> ${this.px.icon(sk.icon, 16)} ${sk.name} ${elemBadge} ${weakBadge} ${comboBadge}
-              </span>
-              <span class="sk-cost">${costTag}</span>
-            </div>
-            <div class="sk-desc">${sk.desc}</div>
-          </button>
-        `;
-      })
-      .join("");
-
-    const itemsRow = document.getElementById("combat-items-row");
-    const combatItems = Object.entries(s.inventory)
-      .map(([id, cnt]) => ({ item: this.engine.data.items[id], cnt }))
-      .filter(x => x.item && x.item.usableInCombat && x.cnt > 0);
-
-    const compCharge = c.companionCharge || 0;
-    const compSkillNames = {
-      lumi: "露米・星露聖域 (回35%HP+淨化)",
-      oliver: "奧利弗・解構光束 (破盾-2+易傷)",
-      iggy: "伊格・紅蓮龍息 (破盾-1+灼燒)",
-      sera: "瑟拉・星穹壁壘 (+40甲+星能)"
-    };
-    const compSkillLabel = compSkillNames[s.companion || "lumi"] || "星靈協同技";
-    const compBtnHtml = `<button class="btn-sm ${compCharge >= 100 ? "btn-accent" : "btn-secondary"}"
-      ${compCharge >= 100 ? "" : "disabled"}
-      onclick="window.gameUI.onCompanionSkillClick()">
-      [C] ${compSkillLabel} (${compCharge}%)
-    </button>`;
-    const elemBtnHtml = `<button class="btn-sm btn-secondary" onclick="window.gameUI.onWeaponElementClick()">[E] 附魔：${elemLabelMap[s.weaponElement || "physical"]}</button>`;
-    const foresightBtnHtml = `<button class="btn-sm btn-teal" onclick="window.gameUI.onForesightSlashClick()" title="閃避減傷65%並發動【氣刃大迴旋】反擊升階太刀氣刃！">[X] 太刀見切斬</button>`;
-    const sharpenBtnHtml = `<button class="btn-sm btn-secondary" onclick="window.gameUI.onSharpenWeaponClick()" title="免費磨刀恢復100紫斬(1.38x傷害)與剛刃研磨">[R] 砥石磨刀</button>`;
-    const autoBtnHtml = `<button class="btn-sm btn-teal" onclick="window.gameUI.onAutoBattleClick()">智能出招</button>`;
-    itemsRow.innerHTML =
-      compBtnHtml +
-      foresightBtnHtml +
-      sharpenBtnHtml +
-      elemBtnHtml +
-      autoBtnHtml +
-      (combatItems.length
-        ? combatItems
-            .map(
-              ({ item, cnt }) => `
-              <button class="combat-item-chip" onclick="window.gameUI.onUseItemClick('${item.id}')">
-                ${this.px.icon(item.icon, 14)} ${item.name} [${this.getShortStatSummary(item)}] (x${cnt})
-              </button>`
-            )
-            .join("")
-        : "");
-
-    const logBox = document.getElementById("combat-log-box");
-    logBox.innerHTML = c.log
-      .slice(-6)
-      .map(line => `<div class="combat-log-line">> ${line}</div>`)
-      .join("");
-    logBox.scrollTop = logBox.scrollHeight;
-  }
-
-  onCompanionSkillClick() {
-    const res = this.engine.castCompanionSkill();
-    if (!res.ok && res.msg) {
-      this.showToast(res.msg, "warn");
-    } else if (res.ok && res.msg) {
-      this.showToast(res.msg, "gold");
-    }
-    this.renderAll();
-  }
-
-  onAutoBattleClick() {
-    this.engine.autoBattleStep();
-    this.renderAll();
-  }
-
-  onCombatSkillClick(skillId) {
-    const res = this.engine.executeSkill(skillId);
-    if (!res.ok && res.msg) {
-      this.showToast(res.msg, "warn");
-    }
-    this.renderAll();
-  }
-
-  onUseItemClick(itemId) {
-    const res = this.engine.useItem(itemId);
-    if (!res.ok && res.msg) {
-      this.showToast(res.msg, "warn");
-    } else if (res.ok && res.msg) {
-      this.showToast(`[使用道具] ${res.msg}`, "teal");
-    }
-    this.renderAll();
-  }
-
-  onFleeClick() {
-    if (!this.engine.fleeCombat()) {
-      this.showToast("首領戰無法撤退！", "warn");
-    }
-    this.renderAll();
   }
 
   onLogAdded(entry) {

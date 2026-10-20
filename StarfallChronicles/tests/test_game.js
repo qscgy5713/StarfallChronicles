@@ -13,6 +13,15 @@ require("../js/data.js");
 const { StarfallEngine } = require("../js/engine.js");
 const { MH3DRenderer } = require("../js/mh3d.js");
 
+// 即時戰鬥測試輔助：清除冷卻並讓主角站到魔物旁
+function ready(g) {
+  const rt = g.combat.rt;
+  rt.cd = {};
+  rt.gcd = 0;
+  g.state.x = rt.mx - 1;
+  g.state.y = rt.my;
+}
+
 function runTests() {
   console.log("=== 開始執行《星隕編年史：魔物獵人 3D 狩獵紀元》自動化測試 ===");
 
@@ -24,7 +33,9 @@ function runTests() {
     "../js/data.js",
     "../js/engine.js",
     "../js/mh3d.js",
-    "../js/ui.js"
+    "../js/ui.js",
+    "../js/combat_rt.js",
+    "../js/combat_rt_ui.js"
   ];
   const emojiRegex = /\p{Extended_Pictographic}/u;
   filesToCheck.forEach(rel => {
@@ -107,10 +118,12 @@ function runTests() {
   }
   // corrupted_treant shield = 3, weaknesses = ['fire', 'star']
   // 使用 star 屬性的 star_bolt (原本 shieldBreak: 2，命中弱點應變成 2+1=3 直接打空 3 點護盾)
+  ready(game);
   game.executeSkill("star_bolt");
   assert.strictEqual(game.combat.enemyShield, 0, "弱點屬性攻擊應額外削減 +1 韌性護盾並成功破盾");
   assert.strictEqual(game.combat.brokenThisTurn, true, "敵人護盾歸零應進入 BREAK 暈眩狀態");
   game.state.baseAtk = 500;
+  ready(game);
   game.autoBattleStep();
   assert.strictEqual(game.combat, null, "高攻擊下應擊敗腐化古樹精結束戰鬥");
   console.log("[PASS] Test 4: 屬性弱點克制破盾與回合制戰鬥驗證通過");
@@ -161,9 +174,11 @@ function runTests() {
   assert.strictEqual(game.combat.companionCharge, 100, "開戰時星靈協同能量應為 100%");
   const compSkillRes = game.castCompanionSkill();
   assert.strictEqual(compSkillRes.ok, true, "應成功施放不耗回合的 [C] 星靈主動協同大招");
+  ready(game);
   game.executeSkill("slash"); // physical
   const combosBefore = game.state.stats.combosTriggered;
   if (game.combat) {
+    ready(game);
     game.executeSkill("star_bolt"); // star -> 觸發物理+星輝【熾刃連斬】元素共鳴
     assert.ok(game.state.stats.combosTriggered > combosBefore, "連續使用不同屬性戰技應觸發元素共鳴連攜");
   }
@@ -192,9 +207,10 @@ function runTests() {
   game.recalcStats(true);
   game.startCombat({ enemyId: "mist_wolf" }, "12,3");
   // 將敵方當前意圖指向 heavy 強擊 (mist_wolf intents[2] 是 type: "heavy")
-  game.combat.intentIndex = 2;
   const countersBefore = game.state.stats.perfectCounters || 0;
+  ready(game);
   game.executeSkill("guard"); // 施展星紋防禦架開敵方強擊，觸發完美防反
+  game.rtResolveStrike(game.combat.intents[2], { x: game.state.x, y: game.state.y, r: 2 }); // 展開障壁後立刻承受強擊
   assert.ok((game.state.stats.perfectCounters || 0) > countersBefore, "防禦狀態下承受敵方強擊應觸發【完美星紋防禦反擊】");
   console.log("[PASS] Test 8: 星軌躍遷陣 O、遠古星魂聖棺 U、[E] 武器五屬性附魔與【完美星紋防禦反擊】驗證通過");
 
@@ -241,9 +257,12 @@ function runTests() {
   assert.strictEqual(selHead.part, "head", "應成功鎖定魔物頭部");
   mhGame.combat.enemyHp = 2000;
   mhGame.combat.enemyMaxHp = 2000;
+  mhGame.combat.parts.head.hp = 60; // 即時戰鬥魔物生命倍率較高，測試改以固定部位血量驗證破壞
+  mhGame.combat.parts.tail.hp = 60;
   mhGame.state.baseAtk = 200; // 足夠傷害擊破部位且不秒殺魔物
   mhGame.recalcStats(false);
   const enemyShieldBeforeHeadBreak = mhGame.combat.enemyShield;
+  ready(mhGame);
   mhGame.executeSkill("slash"); // 擊破頭部
   assert.strictEqual(mhGame.combat.parts.head.broken, true, "魔物頭部龍角應被徹底擊碎破壞");
   assert.ok(mhGame.state.stats.partsBroken >= 1, "部位破壞次數統計應累加");
@@ -254,6 +273,7 @@ function runTests() {
   const selTail = mhGame.selectMonsterPart("tail");
   assert.strictEqual(selTail.part, "tail", "應成功鎖定魔物尾巴");
   const tailsBefore = mhGame.state.stats.tailsSevered || 0;
+  ready(mhGame);
   mhGame.executeSkill("slash"); // 斬斷尾巴
   assert.strictEqual(mhGame.combat.parts.tail.broken, true, "魔物尾巴應被成功斬斷");
   assert.strictEqual(mhGame.state.stats.tailsSevered, tailsBefore + 1, "斷尾統計次數應累加 1");
@@ -261,8 +281,10 @@ function runTests() {
   // 5. 太刀見切斬 [X] 迴避減傷與【氣刃大迴旋】氣刃升階測試
   mhGame.combat.enemyHp = 500;
   assert.strictEqual(mhGame.state.spiritLevel, 0, "太刀氣刃初始應為 0 (無色刃)");
-  mhGame.combat.intentIndex = 1; // 敵方發動攻擊
+  mhGame.combat.rt.dodgeCd = 0;
+  mhGame.state.mp = mhGame.state.maxMp;
   const foresightRes = mhGame.castForesightSlash();
+  mhGame.rtResolveStrike(mhGame.combat.intents[0], { x: mhGame.state.x, y: mhGame.state.y, r: 2 }); // 翻滾無敵期間被擊中
   assert.strictEqual(foresightRes.ok, true, "太刀見切斬應成功施展");
   assert.strictEqual(mhGame.state.spiritLevel, 1, "受到敵方攻擊觸發氣刃大迴旋後，太刀氣刃應升階至 1 (白刃)");
   assert.ok((mhGame.state.stats.foresightCounters || 0) >= 1, "見切反擊統計應累加");
@@ -345,6 +367,7 @@ function runTests() {
   };
 
   require("../js/ui.js");
+  require("../js/combat_rt_ui.js");
   const testUI = new global.window.GameUI(mhGame);
   assert.ok(testUI, "GameUI 應成功初始化且無任何語法錯誤");
   testUI.renderAll();
@@ -354,7 +377,54 @@ function runTests() {
   global.requestAnimationFrame = prevReqAnim;
   console.log("[PASS] Test 10: 前端 UI 模組語法完整性、事件綁定與 GameUI 初始化渲染驗證通過");
 
-  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 10 大自動化測試 100% 通過！ ===");
+  // Test 11: 即時戰鬥 - 魔物追擊/預警/命中、技能冷卻、距離限制、翻滾無敵與撤退
+  {
+    const rg = new StarfallEngine(global.window.GAME_DATA);
+    let coord = null;
+    for (const k of Object.keys(rg.activeEvents)) {
+      const [x, y] = k.split(",").map(Number);
+      if (rg.activeMap[y][x] === "E") { coord = k; break; }
+    }
+    rg.startCombat({ enemyId: "mist_wolf" }, coord);
+    const rt = rg.combat.rt;
+    outer: for (let dx = -5; dx <= 5; dx++) {
+      for (let dy = -5; dy <= 5; dy++) {
+        if (Math.hypot(dx, dy) >= 4.5 && rg.rtWalkable(rt.mx + dx, rt.my + dy)) {
+          rg.state.x = rt.mx + dx; rg.state.y = rt.my + dy; break outer;
+        }
+      }
+    }
+    const far = rg.executeSkill("slash");
+    assert.strictEqual(far.ok, false, "距離太遠時近戰技能不可施放");
+    // 不動等待：魔物應追上、預警並命中
+    const hp0 = rg.state.hp;
+    let sawWindup = false;
+    for (let i = 0; i < 400 && rg.combat && rg.state.hp === hp0; i++) {
+      rg.rtUpdate(0.05);
+      if (rt.m.state === "windup" && rt.m.zone) sawWindup = true;
+    }
+    assert.ok(sawWindup, "魔物接近後應先進入帶預警範圍的出招前搖");
+    assert.ok(rg.state.hp < hp0, "站在預警範圍內不閃避應受到傷害");
+    // 冷卻
+    rt.cd = {}; rt.gcd = 0;
+    rg.state.x = rt.mx - 1; rg.state.y = rt.my;
+    assert.strictEqual(rg.executeSkill("slash").ok, true, "貼近後可施放星芒斬");
+    assert.strictEqual(rg.executeSkill("slash").ok, false, "施放後技能應進入冷卻");
+    // 翻滾無敵：預警命中瞬間無敵 -> 不受傷並觸發氣刃大迴旋
+    rt.dodgeCd = 0; rg.state.mp = rg.state.maxMp;
+    rg.castForesightSlash();
+    assert.ok(rt.ivT > 0, "翻滾後應有無敵時間");
+    const hpIv = rg.state.hp;
+    rg.rtResolveStrike(rg.combat.intents[0], { x: rg.state.x, y: rg.state.y, r: 2 });
+    assert.strictEqual(rg.state.hp, hpIv, "無敵期間被擊中不應受傷");
+    // 撤退需持續 1.6 秒
+    assert.strictEqual(rg.fleeCombat(), true, "一般魔物可撤退");
+    for (let i = 0; i < 40 && rg.combat; i++) { rt.fleeT > 0 && (rg.combat.rt.m.state = "recover", rg.combat.rt.m.t = 9); rg.rtUpdate(0.05); }
+    assert.strictEqual(rg.combat, null, "撤退讀條完成後應脫離戰鬥");
+    console.log("[PASS] Test 11: 即時戰鬥（追擊/預警範圍/冷卻/距離/翻滾無敵/撤退）驗證通過");
+  }
+
+  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 11 大自動化測試 100% 通過！ ===");
 }
 
 runTests();

@@ -16,7 +16,7 @@ const GAME_DATA = {
       icon: "pet_lumi",
       unlockChapter: 1,
       passiveBonus: { maxMp: 15, mpRegen: 2 },
-      desc: "【被動】最大星力 +15、回魔 +2｜【協同】每回合戰鬥自動為主角恢復 8% 最大生命與 5 MP。"
+      desc: "【被動】最大星力 +15、回魔 +2｜【協同】戰鬥中每 4 秒自動為主角恢復 8% 最大生命與 5 MP。"
     },
     oliver: {
       id: "oliver",
@@ -24,7 +24,7 @@ const GAME_DATA = {
       icon: "pet_oliver",
       unlockChapter: 2,
       passiveBonus: { vision: 1, crit: 5 },
-      desc: "【被動】迷霧視野 +1、暴擊率 +5%｜【協同】戰鬥中每 2 回合自動發射齒輪飛彈削減敵人 1 點護盾。"
+      desc: "【被動】迷霧視野 +1、暴擊率 +5%｜【協同】戰鬥中每 4 秒自動發射齒輪飛彈削減敵人 1 點護盾。"
     },
     iggy: {
       id: "iggy",
@@ -32,7 +32,7 @@ const GAME_DATA = {
       icon: "pet_iggy",
       unlockChapter: 3,
       passiveBonus: { atk: 10, maxHp: 35 },
-      desc: "【被動】攻擊力 +10、生命 +35｜【協同】每回合噴吐幼龍烈焰造成 45% 攻擊力火屬性傷害，50% 機率附加灼燒。"
+      desc: "【被動】攻擊力 +10、生命 +35｜【協同】每 4 秒噴吐幼龍烈焰造成 45% 攻擊力火屬性傷害，50% 機率附加灼燒。"
     },
     sera: {
       id: "sera",
@@ -40,7 +40,7 @@ const GAME_DATA = {
       icon: "pet_sera",
       unlockChapter: 4,
       passiveBonus: { def: 8, maxHp: 50, maxMp: 20 },
-      desc: "【被動】防禦 +8、生命 +50、星力 +20｜【協同】每回合張開星塵羽翼賦予 +16 護甲並增加 +12% 極限星能。"
+      desc: "【被動】防禦 +8、生命 +50、星力 +20｜【協同】每 4 秒張開星塵羽翼賦予 +16 護甲並增加 +12% 極限星能。"
     }
   },
 
@@ -350,7 +350,7 @@ const GAME_DATA = {
       elementLabel: "防禦",
       unlockedByDefault: true,
       costSP: 0,
-      desc: "[防禦] 架起星力護盾，獲得最大生命 24% 護甲值，本回合減傷 45% 並回復 16 MP。"
+      desc: "[防禦] 架起星力護盾，獲得最大生命 24% 護甲值，展開 1.1 秒減傷 45% 並回復 16 MP（剛展開 0.35 秒內擋下強擊可完美防反）。"
     },
     heavy_thrust: {
       id: "heavy_thrust",
@@ -365,7 +365,7 @@ const GAME_DATA = {
       effect: { type: "vuln", turns: 2 },
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[物理] 勢大力沉的突刺。造成 150% 物理傷害，擊碎 2 點護盾並附加 2 回合【易傷】。"
+      desc: "[物理] 勢大力沉的突刺。造成 150% 物理傷害，擊碎 2 點護盾並附加 4 秒【易傷】。"
     },
     flame_cleave: {
       id: "flame_cleave",
@@ -380,7 +380,7 @@ const GAME_DATA = {
       effect: { type: "burn", turns: 3 },
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[烈焰] 纏繞矮人熔岩烈焰的重斬。造成 155% 火屬性傷害，擊碎 2 點護盾並附加 3 回合【灼燒】。"
+      desc: "[烈焰] 纏繞矮人熔岩烈焰的重斬。造成 155% 火屬性傷害，擊碎 2 點護盾並附加 6 秒【灼燒】。"
     },
     frost_nova: {
       id: "frost_nova",
@@ -409,7 +409,7 @@ const GAME_DATA = {
       elementLabel: "治療",
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[治療] 引導溫和星光，立即恢復 40% 最大生命值，清除負面狀態並獲得 2 回合【再生】。"
+      desc: "[治療] 引導溫和星光，立即恢復 40% 最大生命值，清除負面狀態並獲得 4 秒【再生】。"
     },
     lunar_crescent: {
       id: "lunar_crescent",
@@ -468,7 +468,7 @@ const GAME_DATA = {
       effect: { type: "vuln", turns: 3 },
       unlockedByDefault: false,
       costSP: 2,
-      desc: "[虛空] 撕裂空間的突刺。無視敵方 50% 防禦造成 185% 虛空傷害，擊碎 3 點護盾並附加 3 回合【易傷】。"
+      desc: "[虛空] 撕裂空間的突刺。無視敵方 50% 防禦造成 185% 虛空傷害，擊碎 3 點護盾並附加 6 秒【易傷】。"
     },
     astral_judgment: {
       id: "astral_judgment",
@@ -503,7 +503,7 @@ const GAME_DATA = {
       name: "星泉共鳴",
       icon: "icon_mp",
       maxRank: 5,
-      desc: "每級提升 +15 最大星力(MP)，且每回合自動回復 +3 MP。",
+      desc: "每級提升 +15 最大星力(MP)，且每 2 秒自動回復 +3 MP。",
       bonusPerRank: { maxMp: 15, mpRegen: 3 }
     },
     precision: {
@@ -1029,7 +1029,7 @@ const GAME_DATA = {
     elite_fenrir: {
       id: "elite_fenrir",
       name: "【菁英】蝕影狼王・芬里爾",
-      icon: "enemy_wolf",
+      icon: "elite_fenrir",
       chapter: 1,
       isElite: true,
       weaknesses: ["fire", "star"],
@@ -1073,7 +1073,7 @@ const GAME_DATA = {
     drowned_sentinel: {
       id: "drowned_sentinel",
       name: "沉沒發條衛兵",
-      icon: "enemy_sentinel",
+      icon: "enemy_drowned",
       chapter: 2,
       weaknesses: ["star", "physical"],
       hp: 150,
@@ -1111,7 +1111,7 @@ const GAME_DATA = {
     elite_abyss_crab: {
       id: "elite_abyss_crab",
       name: "【菁英】深淵重甲巨蟹",
-      icon: "enemy_sentinel",
+      icon: "elite_crab",
       chapter: 2,
       isElite: true,
       weaknesses: ["star", "fire"],
@@ -1192,7 +1192,7 @@ const GAME_DATA = {
     elite_vulcan: {
       id: "elite_vulcan",
       name: "【菁英】熔核督軍・瓦爾坎",
-      icon: "enemy_golem",
+      icon: "elite_vulcan",
       chapter: 3,
       isElite: true,
       weaknesses: ["frost", "void"],
@@ -1273,7 +1273,7 @@ const GAME_DATA = {
     elite_twin_inquisitor: {
       id: "elite_twin_inquisitor",
       name: "【菁英】虛空雙子審判官",
-      icon: "enemy_inquisitor",
+      icon: "elite_twin",
       chapter: 4,
       isElite: true,
       weaknesses: ["void", "star"],
@@ -1335,7 +1335,7 @@ const GAME_DATA = {
     elite_regis: {
       id: "elite_regis",
       name: "【菁英】黑曜禁衛統領・雷吉斯",
-      icon: "enemy_templar",
+      icon: "elite_regis",
       chapter: 5,
       isElite: true,
       weaknesses: ["star", "frost"],

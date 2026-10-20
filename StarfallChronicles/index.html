@@ -42,7 +42,7 @@
         <span id="guide-main-text">[區域 1-1] 請前往左上角與【村長奧爾森】對話，領取守林人銅鑰與補給！</span>
       </div>
       <div id="guide-sub-text" class="guide-sub-row">
-        操作提示：跟隨翠綠導蟲探索狩獵場；按 [V] 切換 3D越肩/3D廣角/2D像素；按 [R] 砥石磨刀維持紫斬；按 [G] 享用貓飯；戰鬥中可鎖定【頭部/軀幹/尾巴】進行部位破壞與斷尾！
+        操作提示：跟隨翠綠導蟲探索狩獵場；按 [V] 切換 3D越肩/3D廣角/2D像素；按 [R] 砥石磨刀維持紫斬；按 [G] 享用貓飯；碰到魔物即時開戰：看紅色預警圈走位、按 [X] 翻滾閃避、[1]~[9] 放技能，並可按 [Z] 鎖定【頭部/軀幹/尾巴】破壞部位！
       </div>
     </div>
     <div style="display: flex; gap: 6px; flex-wrap: wrap;">
@@ -173,51 +173,11 @@
       <div class="canvas-wrapper">
         <canvas id="map-canvas" width="960" height="640"></canvas>
 
-        <!-- 回合制橫向像素戰鬥畫面 -->
-        <div id="combat-overlay" class="combat-overlay">
-          <canvas id="battle-canvas" width="880" height="185"></canvas>
-
-          <div class="combat-top-enemy">
-            <div class="enemy-header-row">
-              <div class="enemy-title-group">
-                <span id="combat-enemy-icon"></span>
-                <span id="combat-enemy-name">迷霧蝕影狼</span>
-              </div>
-              <span id="combat-turn-num" class="badge-cnt">第 1 回合</span>
-            </div>
-
-            <div class="bar-group">
-              <div class="bar-label">
-                <span>敵方生命 (HP)</span>
-                <span id="combat-enemy-hp-text">75 / 75</span>
-              </div>
-              <div class="bar-track" style="height: 12px;">
-                <div id="combat-enemy-hp-bar" class="bar-fill hp" style="width: 100%;"></div>
-              </div>
-            </div>
-
-            <div class="shield-row">
-              <span style="font-size: 11.5px; color: #cbd5e1; margin-right: 4px;">韌性護盾 (打空可擊暈敵人並增傷 40%)：</span>
-              <div id="combat-enemy-shields"></div>
-            </div>
-
-            <div id="combat-enemy-intent" class="intent-banner"></div>
-            <div id="combat-enemy-statuses" class="status-row"></div>
-          </div>
-
-          <div class="combat-player-strip">
-            <div><strong>艾爾文</strong> ｜ HP: <strong id="combat-player-hp">145/145</strong> ｜ MP: <strong id="combat-player-mp">75/75</strong> ｜ 護甲: <strong id="combat-player-armor">0</strong> ｜ 極限: <strong id="combat-player-burst">30%</strong></div>
-            <div id="combat-player-statuses" class="status-row" style="margin-top: 0;"></div>
-          </div>
-
-          <div id="combat-skills-grid" class="combat-skills-grid"></div>
-
-          <div class="combat-items-bar">
-            <div id="combat-items-row" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
-            <button class="btn-sm btn-secondary" onclick="window.gameUI.onFleeClick()">戰術撤退</button>
-          </div>
-
-          <div id="combat-log-box" class="combat-log-box"></div>
+        <!-- 即時戰鬥 HUD：魔物狀態列 (上) 與技能快捷列 (下)，戰鬥時才顯示 -->
+        <div id="rt-hud" class="rt-hud">
+          <div id="rt-top" class="rt-top"></div>
+          <div id="rt-log" class="rt-log"></div>
+          <div id="rt-bottom" class="rt-bottom"></div>
         </div>
       </div>
     </section>
@@ -247,8 +207,8 @@
           <p style="font-size: 13px; line-height: 1.65; color: #f1f5f9;">
             1. <strong>視角切換與導蟲引路</strong>：遊戲預設為 2D 經典像素視角；按 <strong>[V]</strong> 鍵可切換 3D越肩 / 3D廣角 / 2D像素，3D 視角下按 <strong>[J] / [L]</strong> 鍵旋轉鏡頭。<br />
             2. <strong>武器斬味與砥石研磨 [R]</strong>：維持紫斬享 1.38 倍超高傷害加成；按 <strong>[R]</strong> 鍵可研磨砥石回滿斬味並獲得【剛刃研磨】。<br />
-            3. <strong>魔物三部位鎖定破壞與斷尾</strong>：戰鬥中可直接滑鼠點擊魔物【頭部】（氣絕 KO）、【軀幹】（弱點肉質）、【尾巴】（累積斬擊斷尾剝取素材）。<br />
-            4. <strong>太刀見切迴避斬 [X] 與星辰貓飯 [G]</strong>：見切看破魔物攻擊無傷反擊升階氣刃刃色；出獵前在營火或按 <strong>[G]</strong> 鍵享用貓飯獲得強大料理增益！
+            3. <strong>魔物三部位鎖定破壞與斷尾</strong>：戰鬥中點擊上方狀態列或按 [Z] 切換鎖定【頭部】（氣絕 KO）、【軀幹】（弱點肉質）、【尾巴】（累積斬擊斷尾剝取素材）。<br />
+            4. <strong>太刀見切迴避斬 [X] 與星辰貓飯 [G]</strong>：魔物出招的紅圈填滿前按 [X] 翻滾，無傷並反擊、升階氣刃刃色；出獵前在營火或按 <strong>[G]</strong> 鍵享用貓飯獲得強大料理增益！
           </p>
         </div>
 
@@ -468,12 +428,15 @@
 
   <div id="toast-container"></div>
 
-  <script src="js/pixel_art.js?v=4.0.1"></script>
-  <script src="js/data.js?v=4.0.1"></script>
-  <script src="js/audio.js?v=4.0.1"></script>
-  <script src="js/engine.js?v=4.0.1"></script>
-  <script src="js/mh3d.js?v=4.0.1"></script>
-  <script src="js/ui.js?v=4.0.1"></script>
+  <script src="js/kenney_assets.js?v=5.0.0"></script>
+  <script src="js/pixel_art.js?v=5.0.0"></script>
+  <script src="js/data.js?v=5.0.0"></script>
+  <script src="js/audio.js?v=5.0.0"></script>
+  <script src="js/combat_rt.js?v=5.0.0"></script>
+  <script src="js/engine.js?v=5.0.0"></script>
+  <script src="js/mh3d.js?v=5.0.0"></script>
+  <script src="js/ui.js?v=5.0.0"></script>
+  <script src="js/combat_rt_ui.js?v=5.0.0"></script>
   <script>
     function toggleAudioMute() {
       if (window.soundSystem) {

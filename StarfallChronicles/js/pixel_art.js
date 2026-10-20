@@ -34,6 +34,94 @@ class PixelArtEngine {
     };
 
     this.sprites = this.defineSprites();
+    // 精英魔物獨立圖示代號（內建矩陣退回用舊圖，外部素材以色調區分）
+    Object.entries({
+      elite_fenrir: "enemy_wolf", elite_crab: "enemy_sentinel", elite_vulcan: "enemy_golem",
+      elite_twin: "enemy_inquisitor", elite_regis: "enemy_templar", enemy_drowned: "enemy_sentinel"
+    }).forEach(([k, v]) => { if (!this.sprites[k]) this.sprites[k] = this.sprites[v]; });
+    this.initExternalSprites();
+  }
+
+  // ---- 外部免費素材（Kenney CC0 Tiny Dungeon / Tiny Town，16x16 圖集）----
+  initExternalSprites() {
+    this.ext = { ready: false, sheets: {} };
+    // 精靈代號 -> [圖集, 格序號(12 欄, 每格 16px)]
+    this.extMap = {
+      hero_0: ["dungeon", 96], hero_1: ["dungeon", 96],
+      npc_elder: ["dungeon", 100], npc_dwarf: ["dungeon", 111], npc_scholar: ["dungeon", 98],
+      npc_mage: ["dungeon", 84], npc_goddess: ["dungeon", 99],
+      // 第三個元素為色調濾鏡，用來讓共用造型的魔物彼此區分
+      enemy_wolf: ["dungeon", 124], elite_fenrir: ["dungeon", 124, "hue-rotate(190deg) saturate(1.7) brightness(1.1)"],
+      boss_behemoth: ["dungeon", 123, "hue-rotate(75deg) saturate(1.3)"],
+      enemy_sentinel: ["dungeon", 97], enemy_drowned: ["dungeon", 97, "hue-rotate(150deg) saturate(1.5)"],
+      enemy_siren: ["dungeon", 108], elite_crab: ["dungeon", 110],
+      boss_chronos: ["dungeon", 86, "hue-rotate(20deg) saturate(1.6) brightness(1.1)"],
+      enemy_golem: ["dungeon", 109, "hue-rotate(-25deg) saturate(1.7)"], elite_vulcan: ["dungeon", 109, "hue-rotate(-40deg) saturate(2.4) brightness(0.75)"],
+      enemy_drake: ["dungeon", 120, "grayscale(0.7) brightness(0.95)"], boss_ignis: ["dungeon", 120, "hue-rotate(-30deg) saturate(3) brightness(1.05)"],
+      enemy_wraith: ["dungeon", 121], enemy_inquisitor: ["dungeon", 87], elite_twin: ["dungeon", 87, "hue-rotate(250deg) saturate(1.8)"],
+      boss_astra: ["dungeon", 112, "hue-rotate(230deg) saturate(1.6)"],
+      enemy_templar: ["dungeon", 96, "brightness(0.55) saturate(1.3)"], elite_regis: ["dungeon", 100, "brightness(0.6) hue-rotate(250deg) saturate(1.8)"],
+      boss_moebius: ["dungeon", 111, "hue-rotate(270deg) saturate(1.8) brightness(0.9)"],
+      herb: ["town", 29], campfire_0: null, chest: ["dungeon", 89]
+    };
+    Object.keys(this.extMap).forEach(k => { if (!this.extMap[k]) delete this.extMap[k]; });
+    if (typeof window === "undefined" || typeof Image === "undefined" || !window.KENNEY) return;
+    let pending = 0;
+    Object.keys(window.KENNEY).forEach(name => {
+      const img = new Image();
+      pending++;
+      img.onload = () => {
+        this.ext.sheets[name] = img;
+        if (--pending === 0) this.onExternalReady();
+      };
+      img.onerror = () => {
+        if (--pending === 0) this.onExternalReady();
+      };
+      img.src = window.KENNEY[name];
+    });
+  }
+
+  onExternalReady() {
+    this.ext.ready = Object.keys(this.ext.sheets).length > 0;
+    this.cache = {};
+    this.procCache = {};
+    this.tintCache = {};
+    if (typeof window !== "undefined" && window.gameUI) {
+      if (typeof window.gameUI.initStaticPixelIcons === "function") window.gameUI.initStaticPixelIcons();
+      if (typeof window.gameUI.renderAll === "function") window.gameUI.renderAll();
+    }
+  }
+
+  getExternalSprite(key) {
+    if (!this.ext || !this.ext.ready) return null;
+    const m = this.extMap[key];
+    if (!m) return null;
+    const img = this.ext.sheets[m[0]];
+    if (!img) return null;
+    const sx = (m[1] % 12) * 16, sy = Math.floor(m[1] / 12) * 16;
+    if (!m[2] || typeof document === "undefined") return { img, sx, sy };
+    // 帶色調濾鏡的精靈：預先繪製到 16x16 離屏畫布並快取
+    this.tintCache = this.tintCache || {};
+    if (!this.tintCache[key]) {
+      const tc = document.createElement("canvas");
+      tc.width = 16; tc.height = 16;
+      const tctx = tc.getContext("2d");
+      tctx.imageSmoothingEnabled = false;
+      tctx.filter = m[2];
+      tctx.drawImage(img, sx, sy, 16, 16, 0, 0, 16, 16);
+      this.tintCache[key] = tc;
+    }
+    return { img: this.tintCache[key], sx: 0, sy: 0 };
+  }
+
+  // 於指定位置繪製圖集中的一格；錨點為底部中心，可超出格子向上延伸
+  drawExternalTile(ctx, sheet, index, px, py, size) {
+    if (!this.ext || !this.ext.ready || !this.ext.sheets[sheet]) return false;
+    const prev = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.ext.sheets[sheet], (index % 12) * 16, Math.floor(index / 12) * 16, 16, 16, Math.floor(px), Math.floor(py), Math.ceil(size), Math.ceil(size));
+    ctx.imageSmoothingEnabled = prev;
+    return true;
   }
 
   defineSprites() {
@@ -1131,6 +1219,21 @@ class PixelArtEngine {
     if (this.cache[key]) return this.cache[key];
     if (typeof document === "undefined") return "";
 
+    const extSp = this.getExternalSprite(spriteKey);
+    if (extSp) {
+      try {
+        const ec = document.createElement("canvas");
+        ec.width = 16; ec.height = 16;
+        const ectx = ec.getContext("2d");
+        ectx.drawImage(extSp.img, extSp.sx, extSp.sy, 16, 16, 0, 0, 16, 16);
+        const eurl = ec.toDataURL("image/png");
+        this.cache[key] = eurl;
+        return eurl;
+      } catch (e) {
+        // 退回內建像素矩陣
+      }
+    }
+
     const c = document.createElement("canvas");
     c.width = 16;
     c.height = 16;
@@ -1216,6 +1319,15 @@ class PixelArtEngine {
     const key = this.sprites[spriteKey] ? spriteKey : "icon_burst";
     const matrix = this.sprites[key];
     if (!matrix) return;
+
+    const extSp = typeof ctx.drawImage === "function" ? this.getExternalSprite(spriteKey) : null;
+    if (extSp) {
+      const prev = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(extSp.img, extSp.sx, extSp.sy, 16, 16, Math.floor(px), Math.floor(py), Math.ceil(size), Math.ceil(size));
+      ctx.imageSmoothingEnabled = prev;
+      return;
+    }
 
     try {
       const proc = typeof ctx.drawImage === "function" ? this.getProcessedSprite(key) : null;
@@ -1460,7 +1572,12 @@ class PixelArtEngine {
     ctx.fillStyle = th.shadow;
     ctx.beginPath(); ctx.ellipse(px + ts * 0.52, py + ts * 0.9, ts * 0.46, ts * 0.16, 0, 0, Math.PI * 2); ctx.fill();
 
-    if (chapter === 1) {
+    const treeIdx = [4, 16, 28, 5, 4, 16][Math.floor(h1 * 6) % 6];
+    if (chapter === 1 && this.ext && this.ext.ready) {
+      // Kenney CC0 樹木素材：略放大並向上延伸，營造茂密森林
+      const tsz = ts * 1.3;
+      this.drawExternalTile(ctx, "town", treeIdx, px - (tsz - ts) / 2, py - (tsz - ts) + ts * 0.04, tsz);
+    } else if (chapter === 1) {
       // 圓潤樹冠 (三層明暗) + 樹幹
       ctx.fillStyle = th.trunk;
       ctx.fillRect(px + p * 6.5, py + p * 10, p * 3, p * 5.5);
