@@ -1674,9 +1674,7 @@ class GameUI {
     choicesBox.innerHTML = encounter.choices
       .map(
         (ch, idx) => `
-        <button class="combat-skill-btn" style="width: 100%;" onclick="window.gameUI.onMysteryChoice(${idx})">
-          <div class="sk-top"><span class="sk-name">${ch.label}</span></div>
-        </button>
+        <button class="choice-btn" onclick="window.gameUI.onMysteryChoice(${idx})">${ch.label}</button>
       `
       )
       .join("");
@@ -2048,19 +2046,29 @@ class GameUI {
   renderCodexModal() {
     const s = this.engine.state;
     const loreBox = document.getElementById("codex-lore-list");
-    loreBox.innerHTML = this.engine.data.loreEntries
-      .map(l => {
-        const unlocked = s.loreUnlocked.includes(l.id);
-        return `
-          <div class="inv-card ${unlocked ? "" : "locked-card"}">
-            <div class="inv-card-head">
-              <strong>${unlocked ? `${this.px.icon("scroll", 16)} ${l.title}` : `[未解鎖] 未知手札 (第 ${l.chapter} 章)`}</strong>
-            </div>
-            <div class="inv-card-desc">${unlocked ? l.text : "探索各章節地圖中的卷軸手札或寶箱即可解鎖此篇歷史文獻。"}</div>
-          </div>
-        `;
-      })
-      .join("");
+    const loreAll = this.engine.data.loreEntries;
+    const loreOpen = loreAll.filter(l => s.loreUnlocked.includes(l.id));
+    const lockedByCh = {};
+    loreAll.filter(l => !s.loreUnlocked.includes(l.id)).forEach(l => (lockedByCh[l.chapter] = (lockedByCh[l.chapter] || 0) + 1));
+    const lockedChips = Object.entries(lockedByCh)
+      .map(([ch, n]) => `<span class="badge-cnt">第 ${ch} 章 ×${n}</span>`)
+      .join(" ");
+    loreBox.innerHTML =
+      loreOpen
+        .map(
+          l => `
+          <div class="inv-card">
+            <div class="inv-card-head"><strong>${this.px.icon("scroll", 16)} ${l.title}</strong></div>
+            <div class="inv-card-desc">${l.text}</div>
+          </div>`
+        )
+        .join("") +
+      (loreOpen.length < loreAll.length
+        ? `<div class="inv-card locked-card" style="grid-column: 1 / -1;">
+            <div class="inv-card-head"><strong>尚有 ${loreAll.length - loreOpen.length} 篇手札未解鎖（已收集 ${loreOpen.length}/${loreAll.length}）</strong></div>
+            <div class="inv-card-desc">探索各章節地圖中的卷軸或寶箱即可解鎖。${lockedChips}</div>
+          </div>`
+        : "");
 
     const elemNames = { physical: "物理", arcane: "星芒", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
     const bestiaryBox = document.getElementById("codex-bestiary-list");

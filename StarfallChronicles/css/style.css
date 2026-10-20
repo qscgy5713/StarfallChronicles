@@ -1377,3 +1377,8 @@ body.in-combat .rt-top, body.in-combat .rt-log { display: block; }
   display: grid !important; grid-template-columns: repeat(2, 1fr); gap: 10px !important; align-items: start;
 }
 @media (max-width: 760px) { #shop-catalog-list, #inv-bag-list, #skills-unlock-list, #codex-lore-list, #codex-bestiary-list, #codex-ach-list { grid-template-columns: 1fr; } }
+
+/* 奇遇祭壇選項按鈕 */
+.choice-btn { width: 100%; text-align: left; padding: 11px 14px; font: inherit; font-size: 13px; line-height: 1.5; color: #e2e8f0; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 8px; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.choice-btn:hover { border-color: #facc15; background: rgba(51, 65, 85, 0.85); transform: translateX(3px); }
+.choice-btn:active { transform: translateX(3px) scale(0.99); }
