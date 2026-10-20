@@ -2927,7 +2927,8 @@ class StarfallEngine {
     const scale = ev.abyssScale || 1.0;
     const comp = this.getComputedStats();
     // 即時戰鬥中玩家出手頻率遠高於原回合制 (約 4~5 倍)，魔物生命以 RT_HP_MULT 倍補償，使一般魔物約 8~12 秒可擊倒
-    const maxHp = Math.round(template.hp * scale * RT_HP_MULT);
+    const typeMult = template.isBoss ? 2.2 : template.isElite ? 1.5 : 1.8; // 首領/精英耐打，避免被技能連段秒殺
+    const maxHp = Math.round(template.hp * scale * RT_HP_MULT * typeMult);
     const elemNames = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
     const weakText = (template.weaknesses || []).map(w => elemNames[w] || w).join(" / ");
     const isAmbush = !!(ev.stunnedSteps && ev.stunnedSteps > 0);
@@ -3173,6 +3174,8 @@ class StarfallEngine {
 
   damageEnemyShield(amount) {
     if (!this.combat || amount <= 0 || this.combat.enemyShield <= 0) return false;
+    // 護盾硬化期：剛從暈眩恢復的魔物短時間內護盾打不破，避免無限連暈
+    if (this.combat.rt && this.combat.rt.shieldImmuneT > 0) return false;
     this.combat.enemyShield = Math.max(0, this.combat.enemyShield - amount);
     if (this.combat.enemyShield === 0 && !this.combat.brokenThisTurn) {
       this.combat.brokenThisTurn = true;

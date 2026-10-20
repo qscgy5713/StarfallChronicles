@@ -4,6 +4,7 @@
  * 玩家以方向鍵走位、[X] 翻滾閃避，技能以冷卻時間運作，不再有回合與等待。
  * 傷害、部位破壞、護盾、斬味等結算仍沿用 engine.js 的 executeSkill。
  */
+const RT_ENEMY_DMG = 2.2; // 魔物傷害倍率：原數值為回合制設計，即時戰鬥需放大才有壓力
 const RT_BEAT = 2.0; // 狀態/星靈/回魔的結算節拍 (秒)；原「回合」類持續時間以節拍計
 const RT_WALKABLE = ".=";
 // 以遠程彈幕攻擊的魔物 (預警圈落在主角所在位置，需要移動躲避)
@@ -269,7 +270,7 @@ const StarfallRT = {
       c.enemyStatuses.atkBuff--;
     }
     if (c.enemyStatuses.weaken > 0) raw *= 0.7;
-    let dmg = Math.max(4, raw - comp.def * 0.65);
+    let dmg = Math.max(4, raw - comp.def * 0.65) * RT_ENEMY_DMG;
     if (c.playerStatuses.vuln > 0) dmg *= 1.3;
 
     // 星紋障壁：展開 0.35 秒內承受攻擊 = 完美防反
@@ -431,7 +432,8 @@ const StarfallRT = {
         if (c.brokenThisTurn) {
           c.brokenThisTurn = false;
           c.enemyShield = c.enemyMaxShield;
-          c.log.push(`[護盾重組] ${c.name} 從破盾狀態中恢復，重新凝聚了韌性護盾！`);
+          rt.shieldImmuneT = c.isBoss ? 12 : c.isElite ? 9 : 6;
+          c.log.push(`[護盾重組] ${c.name} 從破盾狀態中恢復，護盾硬化，${rt.shieldImmuneT} 秒內無法再被打破！`);
         }
         m.state = "recover";
         m.t = 0.5;
@@ -509,7 +511,7 @@ const StarfallRT = {
       rt.comboT -= dt;
       if (rt.comboT <= 0) rt.combo = 0;
     }
-    for (const k of ["gcd", "moveCd", "dodgeCd", "potionCd", "sharpenCd", "ivT", "guardT", "flinchCd", "lockT"]) {
+    for (const k of ["gcd", "moveCd", "dodgeCd", "potionCd", "sharpenCd", "ivT", "guardT", "flinchCd", "lockT", "shieldImmuneT"]) {
       if (rt[k] > 0) rt[k] = Math.max(0, rt[k] - dt);
     }
     for (const k of Object.keys(rt.cd)) {
