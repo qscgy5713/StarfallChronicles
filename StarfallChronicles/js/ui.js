@@ -740,11 +740,17 @@ class GameUI {
         const visible = dist <= comp.vision + 0.5;
 
         const tile = map[y][x];
-        this.px.drawTerrainTile(ctx, tile === "W" ? "#" : tile, this.engine.state.chapter, x, y, px, py, ts, this.animFrame);
+        const nb = {
+          n: y > 0 ? map[y - 1][x] : "#",
+          s: y < rows - 1 ? map[y + 1][x] : "#",
+          w: x > 0 ? map[y][x - 1] : "#",
+          e: x < cols - 1 ? map[y][x + 1] : "#"
+        };
+        this.px.drawTerrainTile(ctx, tile === "W" ? "#" : tile, this.engine.state.chapter, x, y, px, py, ts, this.animFrame, nb);
 
         // 若上方相鄰格為牆體，於地面頂緣繪製立體牆簷落影，強化 16-Bit 地城空間縱深
         if (tile !== "#" && tile !== "W" && y > 0 && (map[y - 1][x] === "#" || map[y - 1][x] === "W")) {
-          ctx.fillStyle = "rgba(3, 6, 14, 0.42)";
+          ctx.fillStyle = "rgba(10, 25, 12, 0.22)";
           ctx.fillRect(px, py, ts, Math.max(4, Math.round(ts * 0.2)));
         }
 
@@ -753,13 +759,50 @@ class GameUI {
         }
 
         if (!explored) {
-          ctx.fillStyle = "rgba(5, 8, 16, 0.9)";
+          ctx.fillStyle = "rgba(14, 22, 34, 0.93)";
           ctx.fillRect(px, py, ts, ts);
         } else if (!visible) {
-          ctx.fillStyle = "rgba(6, 10, 20, 0.42)";
+          ctx.fillStyle = "rgba(20, 30, 50, 0.3)";
           ctx.fillRect(px, py, ts, ts);
         }
       }
+    }
+
+    // 全域光影：章節色調、主角光暈、暗角（讓 2D 地圖有陽光氛圍）
+    {
+      const moods = {
+        1: ["255,248,220", "120,160,90"],
+        2: ["255,250,235", "90,150,170"],
+        3: ["255,200,140", "150,70,40"],
+        4: ["235,245,255", "120,160,210"],
+        5: ["255,190,170", "90,40,110"]
+      };
+      const [lightC, shadeC] = moods[this.engine.state.chapter] || moods[1];
+      const W = this.logicalWidth, H = this.logicalHeight;
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      const gg = ctx.createLinearGradient(0, 0, W, H);
+      gg.addColorStop(0, `rgba(${lightC},1)`);
+      gg.addColorStop(1, `rgba(${shadeC},1)`);
+      ctx.fillStyle = gg;
+      ctx.globalAlpha = 0.22;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "lighter";
+      const hxp = this.engine.state.x * ts + ts / 2 + ox;
+      const hyp = this.engine.state.y * ts + ts / 2 + oy;
+      const hg = ctx.createRadialGradient(hxp, hyp, ts * 0.3, hxp, hyp, ts * 6);
+      hg.addColorStop(0, `rgba(${lightC},0.22)`);
+      hg.addColorStop(1, `rgba(${lightC},0)`);
+      ctx.fillStyle = hg;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "source-over";
+      const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, H * 0.95);
+      vg.addColorStop(0, "rgba(0,0,0,0)");
+      vg.addColorStop(1, "rgba(5,15,10,0.45)");
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
     }
 
     // 繪製 [Q] 星輝脈衝波紋擴散動畫
@@ -832,11 +875,15 @@ class GameUI {
     ctx.fillRect(hx - ts, hy - ts, ts * 3, ts * 3);
 
     // 主角腳底像素陰影與附魔屬性光環
-    ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
-    ctx.fillRect(hx + Math.round(ts * 0.2), hy + ts - 6, Math.round(ts * 0.6), 4);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    ctx.beginPath();
+    ctx.ellipse(hx + ts / 2, hy + ts - 4, ts * 0.32, ts * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.strokeStyle = curElemColor;
     ctx.lineWidth = 2;
-    ctx.strokeRect(hx + 2, hy + 2, ts - 4, ts - 4);
+    ctx.beginPath();
+    ctx.ellipse(hx + ts / 2, hy + ts - 4, ts * 0.4, ts * 0.14, 0, 0, Math.PI * 2);
+    ctx.stroke();
 
     this.px.drawSprite(ctx, frame2 ? "hero_1" : "hero_0", hx + 3, hy + 3, ts - 6);
 
@@ -1020,6 +1067,12 @@ class GameUI {
     const cx = px + ts / 2;
     const cy = py + ts / 2;
 
+    // 物件落影
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+    ctx.beginPath();
+    ctx.ellipse(cx, py + ts * 0.9, ts * 0.32, ts * 0.09, 0, 0, Math.PI * 2);
+    ctx.fill();
+
     // 繪製重要發光地標之 HD-2D 點光源光暈
     const lightColors = {
       F: "rgba(251, 146, 60, 0.28)",
@@ -1161,54 +1214,90 @@ class GameUI {
 
     ctx.clearRect(0, 0, w, h);
 
-    // 1. 章節專屬多層次星夜漸層天幕
-    const stageThemes = {
-      1: { skyTop: "#051410", skyBot: "#0f2e22", floorTop: "#133326", floorBot: "#081711", line: "#2dd4bf", sil: "#092118" },
-      2: { skyTop: "#050f21", skyBot: "#0e294b", floorTop: "#132f52", floorBot: "#071426", line: "#38bdf8", sil: "#0a1d36" },
-      3: { skyTop: "#170705", skyBot: "#3b130d", floorTop: "#421810", floorBot: "#1c0906", line: "#fb923c", sil: "#290d09" },
-      4: { skyTop: "#09071c", skyBot: "#1f194a", floorTop: "#241d54", floorBot: "#0e0b24", line: "#a78bfa", sil: "#151136" },
-      5: { skyTop: "#140612", skyBot: "#38102d", floorTop: "#3d1432", floorBot: "#170613", line: "#f43f5e", sil: "#24091d" }
+    // 1. 章節日景：天空、太陽、雲、遠山
+    const skyThemes = {
+      1: { top: "#3f8fe0", bot: "#bfe3f2", sun: "255,252,225", mount: "rgba(88,128,150,0.6)", far: "#2f7a3a" },
+      2: { top: "#2f86d6", bot: "#c9ecf5", sun: "255,250,235", mount: "rgba(96,140,170,0.55)", far: "#3a8a8c" },
+      3: { top: "#d9531e", bot: "#fcd9a0", sun: "255,236,190", mount: "rgba(130,60,40,0.6)", far: "#7a3d22" },
+      4: { top: "#6fb1ee", bot: "#eef6fc", sun: "255,255,245", mount: "rgba(190,210,232,0.75)", far: "#9db9d3" },
+      5: { top: "#5b2a86", bot: "#ffb784", sun: "255,190,120", mount: "rgba(70,30,70,0.65)", far: "#5a2e55" }
     };
-    const st = stageThemes[chNum] || stageThemes[1];
+    const sk = skyThemes[chNum] || skyThemes[1];
+    const bio = this.px.getBiome2D(chNum);
 
     const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
-    skyGrad.addColorStop(0, st.skyTop);
-    skyGrad.addColorStop(1, st.skyBot);
+    skyGrad.addColorStop(0, sk.top);
+    skyGrad.addColorStop(1, sk.bot);
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, w, horizonY);
 
-    // 2. 動態閃爍星辰與天際星月光輪
-    for (let i = 0; i < 28; i++) {
-      const sx = (i * 89 + 25) % w;
-      const sy = (i * 37 + 12) % (horizonY - 24);
-      const twinkle = (Math.floor(this.animFrame / 15) + i) % 3 === 0;
-      ctx.fillStyle = twinkle ? "#fef08a" : "#94a3b8";
-      ctx.fillRect(sx, sy, twinkle ? 3 : 2, twinkle ? 3 : 2);
-    }
-    const moonGrad = ctx.createRadialGradient(w * 0.5, 38, 6, w * 0.5, 38, 68);
-    moonGrad.addColorStop(0, "rgba(250, 204, 21, 0.25)");
-    moonGrad.addColorStop(0.5, "rgba(56, 189, 248, 0.08)");
-    moonGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = moonGrad;
-    ctx.fillRect(w * 0.5 - 70, 0, 140, 110);
+    const sunX = w * 0.68;
+    const sunGrad = ctx.createRadialGradient(sunX, horizonY - 20, 4, sunX, horizonY - 20, 190);
+    sunGrad.addColorStop(0, `rgba(${sk.sun},0.95)`);
+    sunGrad.addColorStop(0.35, `rgba(${sk.sun},0.3)`);
+    sunGrad.addColorStop(1, `rgba(${sk.sun},0)`);
+    ctx.fillStyle = sunGrad;
+    ctx.fillRect(0, 0, w, horizonY + 10);
 
-    // 3. 章節遠景剪影（古樹林 / 沉沒鐘樓拱門 / 熔岩鍛造巨柱 / 浮空觀星塔）
-    ctx.fillStyle = st.sil;
-    for (let i = 0; i < 12; i++) {
-      const bx = i * 78;
-      const bh = 28 + ((i * 19 + chNum * 11) % 36);
-      ctx.fillRect(bx + 10, horizonY - bh, 46, bh);
-      ctx.fillRect(bx + 22, horizonY - bh - 12, 22, 12);
+    ctx.fillStyle = chNum === 3 ? "rgba(90,40,30,0.4)" : chNum === 5 ? "rgba(255,170,150,0.5)" : "rgba(255,255,255,0.78)";
+    for (let i = 0; i < 5; i++) {
+      const cx = ((i * 211 + this.animFrame * 0.18) % (w + 200)) - 100;
+      const cy = 14 + (i * 23) % Math.max(20, horizonY - 56);
+      [[0, 0, 40, 11], [-28, 4, 26, 9], [30, 5, 30, 10], [6, -7, 24, 10]].forEach(([ox, oy, rx, ry]) => {
+        ctx.beginPath(); ctx.ellipse(cx + ox, cy + oy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+      });
     }
 
-    // 4. 透視格紋戰鬥地坪
+    ctx.fillStyle = sk.mount;
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY);
+    for (let mx = 0; mx <= w + 40; mx += 40) {
+      ctx.lineTo(mx, horizonY - 24 - Math.abs(Math.sin(mx * 0.012 + chNum * 1.7)) * 44);
+    }
+    ctx.lineTo(w, horizonY);
+    ctx.closePath();
+    ctx.fill();
+
+    // 2. 章節遠景植被 / 地物
+    for (let i = 0; i < 16; i++) {
+      const bx = i * 58 + ((i * 17) % 20);
+      const bh = 22 + ((i * 19 + chNum * 11) % 26);
+      const by = horizonY;
+      if (chNum === 1) {
+        ctx.fillStyle = "#1f6b34";
+        ctx.beginPath(); ctx.arc(bx, by - bh, 18, 0, Math.PI * 2); ctx.arc(bx + 14, by - bh + 6, 14, 0, Math.PI * 2); ctx.arc(bx - 13, by - bh + 7, 13, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#5a3a1a"; ctx.fillRect(bx - 3, by - bh + 8, 6, bh - 8);
+      } else if (chNum === 2) {
+        ctx.strokeStyle = "#8b5a2b"; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(bx + 6, by - bh * 0.6, bx + 2, by - bh); ctx.stroke();
+        ctx.strokeStyle = "#2f9e44"; ctx.lineWidth = 3;
+        for (let k = 0; k < 5; k++) { const a = -Math.PI + (k / 4) * Math.PI; ctx.beginPath(); ctx.moveTo(bx + 2, by - bh); ctx.quadraticCurveTo(bx + 2 + Math.cos(a) * 14, by - bh + Math.sin(a) * 10 - 4, bx + 2 + Math.cos(a) * 22, by - bh + Math.sin(a) * 4 + 8); ctx.stroke(); }
+      } else if (chNum === 3) {
+        ctx.fillStyle = "#4a2a1c";
+        ctx.beginPath(); ctx.moveTo(bx - 14, by); ctx.lineTo(bx - 3, by - bh * 1.3); ctx.lineTo(bx + 4, by - bh * 0.7); ctx.lineTo(bx + 14, by); ctx.closePath(); ctx.fill();
+      } else if (chNum === 4) {
+        ctx.fillStyle = "#2f6f55";
+        for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(bx - 14 + k * 3, by - k * 11); ctx.lineTo(bx, by - bh - k * 11 + 8); ctx.lineTo(bx + 14 - k * 3, by - k * 11); ctx.closePath(); ctx.fill(); }
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(bx - 2, by - bh - 22, 4, 3);
+      } else {
+        ctx.fillStyle = "#8b46f0";
+        ctx.beginPath(); ctx.moveTo(bx - 8, by); ctx.lineTo(bx - 8, by - bh * 0.8); ctx.lineTo(bx, by - bh * 1.1); ctx.lineTo(bx + 8, by - bh * 0.8); ctx.lineTo(bx + 8, by); ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // 3. 地面：章節地表色 + 雜訊 + 透視線
     const floorGrad = ctx.createLinearGradient(0, horizonY, 0, h);
-    floorGrad.addColorStop(0, st.floorTop);
-    floorGrad.addColorStop(1, st.floorBot);
+    floorGrad.addColorStop(0, bio.groundAlt);
+    floorGrad.addColorStop(1, bio.dark);
     ctx.fillStyle = floorGrad;
     ctx.fillRect(0, horizonY, w, h - horizonY);
-
-    ctx.strokeStyle = "rgba(148, 163, 184, 0.16)";
+    for (let i = 0; i < 70; i++) {
+      const nx = (i * 97 + 13) % w;
+      const ny = horizonY + 6 + ((i * 53) % (h - horizonY - 8));
+      ctx.fillStyle = i % 4 === 0 ? bio.fleck[i % bio.fleck.length] : "rgba(0,0,0,0.12)";
+      ctx.fillRect(nx, ny, i % 4 === 0 ? 3 : 2, 2);
+    }
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
     ctx.lineWidth = 1;
     for (let gx = -120; gx <= w + 120; gx += 64) {
       ctx.beginPath();
@@ -1216,8 +1305,12 @@ class GameUI {
       ctx.lineTo(gx, h);
       ctx.stroke();
     }
-    ctx.fillStyle = st.line;
-    ctx.fillRect(0, horizonY, w, 3);
+    const hz = ctx.createLinearGradient(0, horizonY - 6, 0, horizonY + 14);
+    hz.addColorStop(0, "rgba(255,255,255,0)");
+    hz.addColorStop(0.5, `rgba(${sk.sun},0.35)`);
+    hz.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = hz;
+    ctx.fillRect(0, horizonY - 6, w, 20);
 
     // 5. 繪製主角、星靈夥伴與腳底光環落影
     const heroLunge = c.slashAnim > 0 ? 38 : 0;
@@ -1225,15 +1318,19 @@ class GameUI {
     const hx = 120 + heroLunge;
     const hy = h - 122 + heroBob;
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(hx + 12, h - 46, 56, 8);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.beginPath();
+    ctx.ellipse(hx + 40, h - 44, 34, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
     this.px.drawSprite(ctx, frame2 ? "hero_1" : "hero_0", hx, hy, 80);
 
     const petObj = this.engine.data.companions[this.engine.state.companion || "lumi"];
     if (petObj) {
       const bob = Math.sin(this.animFrame * 0.15) * 4;
-      ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-      ctx.fillRect(64, h - 48, 36, 6);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+      ctx.beginPath();
+      ctx.ellipse(82, h - 46, 20, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
       this.px.drawSprite(ctx, petObj.icon, 58, h - 102 + bob, 48);
     }
 
@@ -1246,8 +1343,10 @@ class GameUI {
     const enemyX = w - 230 + shakeX;
     const enemyY = (c.isBoss ? h - 148 : h - 130) + shakeY;
 
-    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-    ctx.fillRect(enemyX + 10, h - 45, bossSize - 20, 10);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+    ctx.beginPath();
+    ctx.ellipse(enemyX + bossSize / 2, h - 42, bossSize * 0.42, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
 
     if (c.enemyShield > 0 && !c.brokenThisTurn) {
       ctx.save();

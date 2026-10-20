@@ -20,16 +20,17 @@
 
     <div class="top-nav-btns">
       <span style="font-size: 12px; color: #94a3b8; margin-right: 4px;">時長 <strong id="hud-playtime">00:00</strong></span>
-      <button class="nav-btn" onclick="window.gameUI.openModal('intro')"><span id="nav-ic-help"></span>狩獵指南</button>
-      <button class="nav-btn" onclick="window.gameUI.openModal('canteen')" style="border-color: #f59e0b; color: #fef08a;">[G] 獵人貓飯</button>
-      <button class="nav-btn" onclick="window.gameUI.openModal('inventory')"><span id="nav-ic-inv"></span>背包裝備</button>
-      <button class="nav-btn" onclick="window.gameUI.openModal('skills')"><span id="nav-ic-skill"></span>技能天賦 (<span id="hud-sp">1 點</span>)</button>
-      <button class="nav-btn" onclick="window.gameUI.openModal('craft')"><span id="nav-ic-craft"></span>鍛造工坊</button>
-      <button class="nav-btn" onclick="window.gameUI.openModal('shop')"><span id="nav-ic-shop"></span>星界行商</button>
-      <button class="nav-btn" onclick="window.gameUI.openModal('codex')"><span id="nav-ic-codex"></span>圖鑑(<span id="hud-lore-count">0/15</span>)‧成就(<span id="hud-ach-count">0/20</span>)</button>
-      <button class="nav-btn" onclick="window.gameEngine.enterAbyss(1); window.gameUI.renderAll();"><span id="nav-ic-abyss"></span>無盡星淵</button>
-      <button class="nav-btn" onclick="window.gameUI.openModal('save')"><span id="nav-ic-save"></span>存檔/讀檔</button>
-      <button id="btn-mute" class="nav-btn" onclick="toggleAudioMute()">音樂：開</button>
+      <button title="角色裝備 [Tab]" class="nav-btn" onclick="toggleDrawer()"><span id="nav-ic-char" class="dock-glyph">裝</span></button>
+      <button title="狩獵指南" class="nav-btn" onclick="window.gameUI.openModal('intro')"><span id="nav-ic-help"></span>狩獵指南</button>
+      <button title="獵人貓飯 [G]" class="nav-btn" onclick="window.gameUI.openModal('canteen')" style="border-color: #f59e0b; color: #fef08a;"><span class="dock-glyph">飯</span></button>
+      <button title="背包裝備" class="nav-btn" onclick="window.gameUI.openModal('inventory')"><span id="nav-ic-inv"></span>背包裝備</button>
+      <button title="技能天賦" class="nav-btn" onclick="window.gameUI.openModal('skills')"><span id="nav-ic-skill"></span><span id="hud-sp" class="dock-badge">1 點</span></button>
+      <button title="鍛造工坊" class="nav-btn" onclick="window.gameUI.openModal('craft')"><span id="nav-ic-craft"></span>鍛造工坊</button>
+      <button title="星界行商" class="nav-btn" onclick="window.gameUI.openModal('shop')"><span id="nav-ic-shop"></span>星界行商</button>
+      <button title="圖鑑與成就" class="nav-btn" onclick="window.gameUI.openModal('codex')"><span id="nav-ic-codex"></span><span class="dock-badge"><span id="hud-lore-count">0/15</span> <span id="hud-ach-count" style="display:none">0/20</span></span></button>
+      <button title="無盡星淵" class="nav-btn" onclick="window.gameEngine.enterAbyss(1); window.gameUI.renderAll();"><span id="nav-ic-abyss"></span>無盡星淵</button>
+      <button title="存檔 / 讀檔" class="nav-btn" onclick="window.gameUI.openModal('save')"><span id="nav-ic-save"></span>存檔/讀檔</button>
+      <button title="音樂開關" id="btn-mute" class="nav-btn" onclick="toggleAudioMute()">音樂：開</button>
     </div>
   </header>
 
@@ -41,7 +42,7 @@
         <span id="guide-main-text">[區域 1-1] 請前往左上角與【村長奧爾森】對話，領取守林人銅鑰與補給！</span>
       </div>
       <div id="guide-sub-text" class="guide-sub-row">
-        操作提示：跟隨翠綠導蟲探索 3D 狩獵場；按 [V] 切換 3D越肩/3D廣角/2D像素；按 [R] 砥石磨刀維持紫斬；按 [G] 享用貓飯；戰鬥中可鎖定【頭部/軀幹/尾巴】進行部位破壞與斷尾！
+        操作提示：跟隨翠綠導蟲探索狩獵場；按 [V] 切換 3D越肩/3D廣角/2D像素；按 [R] 砥石磨刀維持紫斬；按 [G] 享用貓飯；戰鬥中可鎖定【頭部/軀幹/尾巴】進行部位破壞與斷尾！
       </div>
     </div>
     <div style="display: flex; gap: 6px; flex-wrap: wrap;">
@@ -69,8 +70,9 @@
   <!-- 三欄式主畫面 -->
   <main class="main-workspace">
     <!-- 左欄：主角像素頭像、狀態、星靈夥伴與方向控制 -->
-    <aside class="side-panel">
-      <div>
+    <!-- 浮動 HUD：左上角狀態、任務與日誌（疊在遊戲畫面上） -->
+    <div id="hud-left" class="hud-float">
+      <div class="hud-status">
         <div style="display: flex; align-items: center; gap: 10px; background: #162032; padding: 8px; border: 2px solid #334155; margin-bottom: 10px;">
           <canvas id="hero-avatar-canvas" width="48" height="48" style="width: 48px; height: 48px; background: #060911; border: 2px solid #facc15; flex-shrink: 0;"></canvas>
           <div style="flex: 1;">
@@ -102,6 +104,22 @@
           </div>
         </div>
       </div>
+      <div class="hud-quests">
+      <div>
+        <div class="panel-section-title">
+          <span>本章主線與支線委託</span>
+        </div>
+        <div id="quest-tracker-list" class="quest-list"></div>
+      </div>
+
+      </div>
+      <div class="hud-log">
+        <div id="adventure-log" class="adventure-log-box"></div>
+      </div>
+    </div>
+
+    <!-- 角色面板抽屜 [Tab]：能力、夥伴、裝備、藥水、方向鍵 -->
+    <aside class="side-panel char-drawer" id="char-drawer">
 
       <div class="hero-metrics-grid">
         <div class="metric-chip">
@@ -204,22 +222,6 @@
       </div>
     </section>
 
-    <!-- 右欄：章節任務步驟清單與冒險日誌 -->
-    <aside class="side-panel">
-      <div>
-        <div class="panel-section-title">
-          <span>本章主線與支線委託</span>
-        </div>
-        <div id="quest-tracker-list" class="quest-list"></div>
-      </div>
-
-      <div style="flex: 1; display: flex; flex-direction: column;">
-        <div class="panel-section-title">
-          <span>即時冒險編年日誌</span>
-        </div>
-        <div id="adventure-log" class="adventure-log-box"></div>
-      </div>
-    </aside>
   </main>
 
   <!-- 0. 開場故事與核心系統指南視窗 -->
@@ -243,7 +245,7 @@
         <div class="inv-card equipped" style="padding: 12px;">
           <div style="color: #38bdf8; font-weight: 800; font-size: 14px; margin-bottom: 6px;">3D 魔物獵人核心系統指南</div>
           <p style="font-size: 13px; line-height: 1.65; color: #f1f5f9;">
-            1. <strong>3D 越肩狩獵視角與導蟲引路</strong>：遊戲預設進入 3D 越肩狩獵模式，翠綠導蟲會在 3D 空間中為你引路；按 <strong>[V]</strong> 鍵可切換 3D越肩 / 3D廣角 / 2D像素，按 <strong>[J] / [L]</strong> 鍵旋轉鏡頭。<br />
+            1. <strong>視角切換與導蟲引路</strong>：遊戲預設為 2D 經典像素視角；按 <strong>[V]</strong> 鍵可切換 3D越肩 / 3D廣角 / 2D像素，3D 視角下按 <strong>[J] / [L]</strong> 鍵旋轉鏡頭。<br />
             2. <strong>武器斬味與砥石研磨 [R]</strong>：維持紫斬享 1.38 倍超高傷害加成；按 <strong>[R]</strong> 鍵可研磨砥石回滿斬味並獲得【剛刃研磨】。<br />
             3. <strong>魔物三部位鎖定破壞與斷尾</strong>：戰鬥中可直接滑鼠點擊魔物【頭部】（氣絕 KO）、【軀幹】（弱點肉質）、【尾巴】（累積斬擊斷尾剝取素材）。<br />
             4. <strong>太刀見切迴避斬 [X] 與星辰貓飯 [G]</strong>：見切看破魔物攻擊無傷反擊升階氣刃刃色；出獵前在營火或按 <strong>[G]</strong> 鍵享用貓飯獲得強大料理增益！
@@ -480,6 +482,17 @@
         if (btn) btn.textContent = isMuted ? "音樂：關" : "音樂：開";
       }
     }
+
+    function toggleDrawer() {
+      document.body.classList.toggle("drawer-open");
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        toggleDrawer();
+      }
+    });
 
     function safeCloseIntro() {
       if (window.gameUI && typeof window.gameUI.closeModals === "function") {

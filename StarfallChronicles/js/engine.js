@@ -69,7 +69,8 @@ class StarfallEngine {
       pulseCooldown: 0,
       pulseVisionSteps: 0,
       weaponElement: "physical",
-      viewMode: "3d_shoulder",
+      viewMode: "2d_pixel",
+      viewDefaultVer: 2,
       sharpness: 100,
       polishTurns: 0,
       spiritLevel: 0,
@@ -238,7 +239,7 @@ class StarfallEngine {
       "3d_orbit": "3D 廣角戰術視角 (3D Tactical)",
       "2d_pixel": "2D 經典像素視角 (Classic 16-Bit)"
     };
-    const cur = this.state.viewMode || "3d_shoulder";
+    const cur = this.state.viewMode || "2d_pixel";
     const next = order[(order.indexOf(cur) + 1) % order.length];
     this.state.viewMode = next;
     if (next !== "2d_pixel") {
@@ -3785,7 +3786,12 @@ class StarfallEngine {
     if (typeof this.state.pulseVisionSteps !== "number") this.state.pulseVisionSteps = 0;
     if (!this.state.weaponElement) this.state.weaponElement = "physical";
     if (!this.state.zoneMasteryClaimed) this.state.zoneMasteryClaimed = {};
-    if (!this.state.viewMode) this.state.viewMode = "3d_shoulder";
+    if (!this.state.viewMode) this.state.viewMode = "2d_pixel";
+    // 預設視角改為 2D：舊存檔只遷移一次，之後玩家自行切換的 [V] 選擇會被保留
+    if (this.state.viewDefaultVer !== 2) {
+      this.state.viewMode = "2d_pixel";
+      this.state.viewDefaultVer = 2;
+    }
     if (typeof this.state.sharpness !== "number") this.state.sharpness = 100;
     if (typeof this.state.polishTurns !== "number") this.state.polishTurns = 0;
     if (typeof this.state.spiritLevel !== "number") this.state.spiritLevel = 0;

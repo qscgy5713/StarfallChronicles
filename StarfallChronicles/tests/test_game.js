@@ -200,15 +200,15 @@ function runTests() {
 
   // Test 9: 驗證《魔物獵人》3D 視角投影與核心狩獵系統 (斬味系統、砥石研磨、魔物三部位鎖定破壞與斷尾、太刀見切斬與公會貓飯)
   const mhGame = new StarfallEngine(global.window.GAME_DATA);
-  assert.strictEqual(mhGame.state.viewMode, "3d_shoulder", "預設視角應為 3D 越肩狩獵視角 (3d_shoulder)");
+  assert.strictEqual(mhGame.state.viewMode, "2d_pixel", "預設視角應為 2D 經典像素視角 (2d_pixel)");
 
-  // 1. 視角切換循環測試 (3d_shoulder -> 3d_orbit -> 2d_pixel -> 3d_shoulder)
+  // 1. 視角切換循環測試 (2d_pixel -> 3d_shoulder -> 3d_orbit -> 2d_pixel)
   const v1 = mhGame.toggleViewMode();
-  assert.strictEqual(v1.viewMode, "3d_orbit", "第一次切換應為 3D 廣角戰術視角 (3d_orbit)");
+  assert.strictEqual(v1.viewMode, "3d_shoulder", "第一次切換應為 3D 越肩狩獵視角 (3d_shoulder)");
   const v2 = mhGame.toggleViewMode();
-  assert.strictEqual(v2.viewMode, "2d_pixel", "第二次切換應為 2D 經典像素視角 (2d_pixel)");
+  assert.strictEqual(v2.viewMode, "3d_orbit", "第二次切換應為 3D 廣角戰術視角 (3d_orbit)");
   const v3 = mhGame.toggleViewMode();
-  assert.strictEqual(v3.viewMode, "3d_shoulder", "第三次切換應回到 3D 越肩狩獵視角 (3d_shoulder)");
+  assert.strictEqual(v3.viewMode, "2d_pixel", "第三次切換應回到 2D 經典像素視角 (2d_pixel)");
 
   // 2. 武器斬味系統與砥石研磨 [R] 測試
   assert.strictEqual(mhGame.state.sharpness, 100, "初始斬味應為 100");

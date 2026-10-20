@@ -1160,10 +1160,76 @@ class PixelArtEngine {
     return `<img class="px-icon" src="${url}" width="${size}" height="${size}" alt="" />`;
   }
 
+  // 光影處理：自動邊緣高光、暗部、垂直漸層與外描邊，讓 16x16 精靈更立體
+  shadeHex(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const c = v => Math.max(0, Math.min(255, Math.round(v * f)));
+    return [c((n >> 16) & 255), c((n >> 8) & 255), c(n & 255)];
+  }
+
+  getProcessedSprite(key) {
+    if (this.procCache && this.procCache[key]) return this.procCache[key];
+    if (typeof document === "undefined") return null;
+    const matrix = this.sprites[key];
+    if (!matrix) return null;
+    const S = 18; // 外圍留 1px 供描邊
+    const c = document.createElement("canvas");
+    if (!c || typeof c.getContext !== "function") return null;
+    c.width = S;
+    c.height = S;
+    const ctx = c.getContext("2d");
+    if (!ctx || typeof ctx.getImageData !== "function" || typeof ctx.putImageData !== "function") return null;
+    const img = ctx.createImageData ? ctx.createImageData(S, S) : null;
+    if (!img || !img.data) return null;
+    const data = img.data;
+    const solid = (x, y) => x >= 0 && y >= 0 && x < 16 && y < 16 && !!this.palette[(matrix[y] || "")[x]];
+    const isK = (x, y) => (matrix[y] || "")[x] === "K";
+    const put = (x, y, rgb, a = 255) => {
+      const i = ((y + 1) * S + (x + 1)) * 4;
+      data[i] = rgb[0]; data[i + 1] = rgb[1]; data[i + 2] = rgb[2]; data[i + 3] = a;
+    };
+    for (let y = -1; y <= 16; y++) {
+      for (let x = -1; x <= 16; x++) {
+        if (solid(x, y)) {
+          const base = this.palette[matrix[y][x]];
+          let f = 1.1 - (y / 15) * 0.2;
+          if (!isK(x, y)) {
+            if (!solid(x, y - 1)) f *= 1.22;
+            if (!solid(x - 1, y)) f *= 1.08;
+            if (!solid(x, y + 1)) f *= 0.8;
+            if (!solid(x + 1, y)) f *= 0.84;
+          }
+          put(x, y, this.shadeHex(base, f));
+        } else if (solid(x - 1, y) || solid(x + 1, y) || solid(x, y - 1) || solid(x, y + 1)) {
+          const nk = (solid(x - 1, y) && !isK(x - 1, y)) || (solid(x + 1, y) && !isK(x + 1, y)) || (solid(x, y - 1) && !isK(x, y - 1)) || (solid(x, y + 1) && !isK(x, y + 1));
+          if (nk) put(x, y, [8, 12, 22], 230);
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    this.procCache = this.procCache || {};
+    this.procCache[key] = c;
+    return c;
+  }
+
   drawSprite(ctx, spriteKey, px, py, size = 34) {
     const key = this.sprites[spriteKey] ? spriteKey : "icon_burst";
     const matrix = this.sprites[key];
     if (!matrix) return;
+
+    try {
+      const proc = typeof ctx.drawImage === "function" ? this.getProcessedSprite(key) : null;
+      if (proc) {
+        const prevSmooth = ctx.imageSmoothingEnabled;
+        ctx.imageSmoothingEnabled = false;
+        const sc = size / 16;
+        ctx.drawImage(proc, Math.floor(px - sc), Math.floor(py - sc), Math.ceil(sc * 18), Math.ceil(sc * 18));
+        ctx.imageSmoothingEnabled = prevSmooth;
+        return;
+      }
+    } catch (e) {
+      // 退回原始逐格繪製
+    }
 
     const scale = size / 16;
     for (let y = 0; y < 16; y++) {
@@ -1184,190 +1250,227 @@ class PixelArtEngine {
     }
   }
 
-  drawTerrainTile(ctx, tileType, chapter, x, y, px, py, ts, animFrame) {
-    const p = ts / 16;
-    const isAlt = (x + y) % 2 === 0;
-    const hash = (x * 13 + y * 29) % 7;
-    const shift = Math.floor(animFrame / 20) % 2;
+  // ==================== 2D 日景地形 (v5.0 全新美術) ====================
+  hash2(x, y, k = 0) {
+    let h = (x * 374761393 + y * 668265263 + k * 2147483647) | 0;
+    h = (h ^ (h >> 13)) * 1274126177;
+    h = h ^ (h >> 16);
+    return (h >>> 0) % 1000 / 1000;
+  }
 
-    if (tileType === "#") {
-      if (chapter === 1) {
-        // 第一章：迷霧森林 — 多層次茂密古樹冠、翠綠亮面與深褐樹幹
-        ctx.fillStyle = "#081812";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#113826";
-        ctx.fillRect(px + p, py + p, ts - p * 2, ts - p * 3);
-        ctx.fillStyle = "#15803d";
-        ctx.fillRect(px + p * 2, py + p * 2, ts - p * 4, ts - p * 6);
-        ctx.fillStyle = "#22c55e";
-        ctx.fillRect(px + p * 3, py + p * 2, p * 5, p * 3);
-        ctx.fillRect(px + p * 8, py + p * 4, p * 5, p * 3);
-        ctx.fillStyle = "#86efac";
-        ctx.fillRect(px + p * 4, py + p * 3, p * 2, p);
-        ctx.fillRect(px + p * 9, py + p * 5, p * 2, p);
-        ctx.fillStyle = "#3f1d0b";
-        ctx.fillRect(px + p * 6, py + p * 11, p * 4, p * 4);
-        ctx.fillStyle = "#78350f";
-        ctx.fillRect(px + p * 7, py + p * 11, p, p * 4);
-      } else if (chapter === 2) {
-        // 第二章：沉沒鐘樓 — 深海青銅砌石、黃銅鉚釘與潮汐水苔
-        ctx.fillStyle = "#081424";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#16304d";
-        ctx.fillRect(px + p, py + p, p * 6, p * 6);
-        ctx.fillRect(px + p * 8, py + p, p * 7, p * 6);
-        ctx.fillRect(px + p, py + p * 8, p * 9, p * 6);
-        ctx.fillRect(px + p * 11, py + p * 8, p * 4, p * 6);
-        ctx.fillStyle = "#29527a";
-        ctx.fillRect(px + p * 2, py + p * 2, p * 4, p);
-        ctx.fillRect(px + p * 9, py + p * 2, p * 5, p);
-        ctx.fillRect(px + p * 2, py + p * 9, p * 7, p);
-        ctx.fillStyle = "#d97706";
-        ctx.fillRect(px + p * 2, py + p * 5, p, p);
-        ctx.fillRect(px + p * 13, py + p * 5, p, p);
-        ctx.fillStyle = "#0d9488";
-        if (hash < 3) ctx.fillRect(px + p * 5, py + p * 7, p * 3, p * 2);
-      } else if (chapter === 3) {
-        // 第三章：熔岩鍛造廠 — 黑曜玄武岩巨牆與動態赤金熔岩脈絡
-        ctx.fillStyle = "#180b08";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#2e1712";
-        ctx.fillRect(px + p, py + p, p * 6, p * 6);
-        ctx.fillRect(px + p * 8, py + p, p * 7, p * 6);
-        ctx.fillRect(px + p, py + p * 8, p * 8, p * 6);
-        ctx.fillRect(px + p * 10, py + p * 8, p * 5, p * 6);
-        ctx.fillStyle = "#4c261d";
-        ctx.fillRect(px + p * 2, py + p * 2, p * 4, p);
-        ctx.fillRect(px + p * 9, py + p * 2, p * 4, p);
-        ctx.fillStyle = shift ? "#ea580c" : "#b45309";
-        ctx.fillRect(px + p * 7, py + p * 2, p, p * 5);
-        ctx.fillRect(px + p * 3, py + p * 7, p * 6, p);
-        ctx.fillRect(px + p * 9, py + p * 8, p, p * 5);
-        if (shift && hash % 2 === 0) {
-          ctx.fillStyle = "#facc15";
-          ctx.fillRect(px + p * 7, py + p * 4, p, p);
-        }
-      } else if (chapter === 4) {
-        // 第四章：浮空星象院 — 星界白金聖柱、黃金星軌鑲邊與青藍星晶核
-        ctx.fillStyle = "#0f0d26";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#272354";
-        ctx.fillRect(px + p, py + p, ts - p * 2, ts - p * 3);
-        ctx.fillStyle = "#4338ca";
-        ctx.fillRect(px + p * 2, py + p * 2, ts - p * 4, ts - p * 5);
-        ctx.fillStyle = "#facc15";
-        ctx.fillRect(px + p * 2, py + p * 2, ts - p * 4, p);
-        ctx.fillRect(px + p * 2, py + p * 12, ts - p * 4, p);
-        ctx.fillStyle = shift ? "#38bdf8" : "#818cf8";
-        ctx.fillRect(px + p * 7, py + p * 5, p * 2, p * 4);
-        ctx.fillStyle = "#e0f2fe";
-        ctx.fillRect(px + p * 7, py + p * 6, p, p * 2);
-      } else {
-        // 第五章：王城星核聖殿 — 黑曜紫紅帝國雕柱與虛空紫晶紋
-        ctx.fillStyle = "#160814";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#36132c";
-        ctx.fillRect(px + p, py + p, p * 6, p * 6);
-        ctx.fillRect(px + p * 8, py + p, p * 7, p * 6);
-        ctx.fillRect(px + p, py + p * 8, p * 9, p * 6);
-        ctx.fillRect(px + p * 11, py + p * 8, p * 4, p * 6);
-        ctx.fillStyle = "#facc15";
-        ctx.fillRect(px + p * 2, py + p, p * 12, p);
-        ctx.fillStyle = shift ? "#c084fc" : "#9333ea";
-        ctx.fillRect(px + p * 7, py + p * 3, p, p * 4);
-        ctx.fillRect(px + p * 4, py + p * 7, p * 5, p);
-      }
-      // 底部立體接地暗邊
-      ctx.fillStyle = "rgba(0, 0, 0, 0.48)";
-      ctx.fillRect(px, py + ts - p * 1.5, ts, p * 1.5);
-      return;
-    }
+  tint(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.max(0, Math.min(255, Math.round(((n >> 16) & 255) * f)));
+    const g = Math.max(0, Math.min(255, Math.round(((n >> 8) & 255) * f)));
+    const b = Math.max(0, Math.min(255, Math.round((n & 255) * f)));
+    return `rgb(${r},${g},${b})`;
+  }
 
-    if (tileType === "~") {
-      if (chapter === 3) {
-        // 沸騰熔岩池
-        ctx.fillStyle = "#450a0a";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#9a3412";
-        ctx.fillRect(px + p, py + p, ts - p * 2, ts - p * 2);
-        ctx.fillStyle = "#ea580c";
-        ctx.fillRect(px + p * (2 + shift * 2), py + p * 3, p * 6, p * 2);
-        ctx.fillRect(px + p * (7 - shift * 2), py + p * 9, p * 6, p * 2);
-        ctx.fillStyle = "#facc15";
-        ctx.fillRect(px + p * (4 + shift), py + p * 4, p * 3, p);
-        ctx.fillRect(px + p * (9 - shift), py + p * 10, p * 2, p);
-      } else if (chapter >= 4) {
-        // 星淵虛空裂隙流
-        ctx.fillStyle = "#0b0720";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#31105e";
-        ctx.fillRect(px + p * 2, py + p * 2, ts - p * 4, ts - p * 4);
-        ctx.fillStyle = "#7c3aed";
-        ctx.fillRect(px + p * (3 + shift), py + p * 4, p * 5, p * 2);
-        ctx.fillRect(px + p * (7 - shift), py + p * 10, p * 5, p * 2);
-        ctx.fillStyle = "#38bdf8";
-        ctx.fillRect(px + p * (10 - shift * 2), py + p * 11, p * 2, p);
-        ctx.fillStyle = "#f8fafc";
-        ctx.fillRect(px + p * (5 + shift * 3), py + p * 5, p, p);
-      } else {
-        // 碧藍深水波紋
-        ctx.fillStyle = "#072a40";
-        ctx.fillRect(px, py, ts, ts);
-        ctx.fillStyle = "#0c4a6e";
-        ctx.fillRect(px + p, py + p, ts - p * 2, ts - p * 2);
-        ctx.fillStyle = "#0284c7";
-        ctx.fillRect(px + p * (2 + shift * 2), py + p * 4, p * 6, p * 2);
-        ctx.fillRect(px + p * (6 - shift * 2), py + p * 10, p * 6, p * 2);
-        ctx.fillStyle = "#7dd3fc";
-        ctx.fillRect(px + p * (4 + shift), py + p * 4, p * 3, p);
-        ctx.fillRect(px + p * (8 - shift), py + p * 10, p * 2, p);
-      }
-      return;
-    }
-
-    if (tileType === "=") {
-      // 立體雙護欄古橋
-      ctx.fillStyle = "#1c0d06";
-      ctx.fillRect(px, py, ts, ts);
-      ctx.fillStyle = "#78350f";
-      ctx.fillRect(px, py + p * 2, ts, ts - p * 4);
-      ctx.fillStyle = "#b45309";
-      for (let i = 1; i < 15; i += 3) {
-        ctx.fillRect(px + p * i, py + p * 2.5, p * 2, ts - p * 5);
-      }
-      ctx.fillStyle = "#facc15";
-      ctx.fillRect(px, py + p, ts, p * 1.3);
-      ctx.fillRect(px, py + ts - p * 2.3, ts, p * 1.3);
-      return;
-    }
-
-    const floorThemes = {
-      1: { base: isAlt ? "#0e2019" : "#11261e", border: "#163026", speck: "#1f4737", accent: "#22c55e" },
-      2: { base: isAlt ? "#0c192b" : "#0f1f36", border: "#172d4a", speck: "#214066", accent: "#38bdf8" },
-      3: { base: isAlt ? "#1e110e" : "#241512", border: "#331e19", speck: "#4a2b24", accent: "#f97316" },
-      4: { base: isAlt ? "#131026" : "#17142e", border: "#241f47", speck: "#352e66", accent: "#a78bfa" },
-      5: { base: isAlt ? "#1c0e18" : "#22111d", border: "#361a2e", speck: "#4f2643", accent: "#f43f5e" }
+  getBiome2D(chapter) {
+    const T = {
+      1: { ground: "#5c9b3f", groundAlt: "#68aa46", dark: "#3f7a2e", fleck: ["#9be07a", "#fde047", "#f9a8d4", "#ffffff"], water: "#1f8fb8", waterHi: "#a5e8f5", wall: "#1f6b34", wallHi: "#6ee08a", trunk: "#6b4423", shadow: "rgba(10,40,10,0.35)" },
+      2: { ground: "#e3d3a0", groundAlt: "#ecdcab", dark: "#bba777", fleck: ["#ffffff", "#f5c6a5", "#c9b27a"], water: "#14a5c9", waterHi: "#c9f5ff", wall: "#6d8aa3", wallHi: "#d8e6f0", trunk: "#8b5a2b", shadow: "rgba(30,50,60,0.3)" },
+      3: { ground: "#b06c3f", groundAlt: "#bb7846", dark: "#7e4626", fleck: ["#e8a25f", "#5b2c14", "#fb923c"], water: "#e8590c", waterHi: "#ffe066", wall: "#5b3a2a", wallHi: "#b4805a", trunk: "#3a2216", shadow: "rgba(50,15,5,0.4)" },
+      4: { ground: "#e8f1f8", groundAlt: "#d8e6f2", dark: "#aac2d8", fleck: ["#ffffff", "#9fd2f2", "#c7dff0"], water: "#4aa3e8", waterHi: "#e0f4ff", wall: "#2f6f55", wallHi: "#eaf6ff", trunk: "#6b4423", shadow: "rgba(30,60,100,0.3)" },
+      5: { ground: "#64405a", groundAlt: "#70486a", dark: "#46293f", fleck: ["#f472b6", "#fcd34d", "#c084fc"], water: "#9f1239", waterHi: "#fda4af", wall: "#7c3aed", wallHi: "#e9d5ff", trunk: "#3b1d4a", shadow: "rgba(30,5,40,0.4)" }
     };
-    const th = floorThemes[chapter] || floorThemes[1];
-    ctx.fillStyle = th.base;
-    ctx.fillRect(px, py, ts, ts);
+    return T[chapter] || T[1];
+  }
 
-    // 細緻石板內框線與角落紋理
-    ctx.strokeStyle = th.border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 0.5, py + 0.5, ts - 1, ts - 1);
+  groundTile(ctx, th, x, y, px, py, ts) {
+    const p = ts / 16;
+    const sub = ts / 4;
+    for (let sy = 0; sy < 4; sy++) {
+      for (let sx = 0; sx < 4; sx++) {
+        const n = this.hash2(x * 4 + sx, y * 4 + sy);
+        ctx.fillStyle = this.tint(n > 0.5 ? th.groundAlt : th.ground, 0.93 + n * 0.14);
+        ctx.fillRect(Math.floor(px + sx * sub), Math.floor(py + sy * sub), Math.ceil(sub), Math.ceil(sub));
+      }
+    }
+  }
 
-    ctx.fillStyle = th.speck;
-    ctx.fillRect(px + p * 2, py + p * 3, p * 2, p * 2);
-    ctx.fillRect(px + p * 11, py + p * 10, p * 2, p * 2);
-    if (hash === 0) {
-      ctx.fillStyle = th.accent;
-      ctx.globalAlpha = 0.35;
-      ctx.fillRect(px + p * 7, py + p * 7, p * 2, p);
-      ctx.globalAlpha = 1.0;
-    } else if (hash === 3) {
-      ctx.fillStyle = th.speck;
-      ctx.fillRect(px + p * 6, py + p * 12, p * 3, p);
+  drawTerrainTile(ctx, tileType, chapter, x, y, px, py, ts, animFrame, nb) {
+    const p = ts / 16;
+    const th = this.getBiome2D(chapter);
+    const h1 = this.hash2(x, y, 1);
+    const h2 = this.hash2(x, y, 2);
+    const h3 = this.hash2(x, y, 3);
+    const sway = Math.sin(animFrame * 0.05 + x * 0.9 + y * 0.6);
+    nb = nb || {};
+
+    // ---------------- 水 / 熔岩 / 虛空流 ----------------
+    if (tileType === "~") {
+      const t = animFrame * 0.06;
+      const g = ctx.createLinearGradient(px, py, px, py + ts);
+      g.addColorStop(0, this.tint(th.water, 1.12));
+      g.addColorStop(1, this.tint(th.water, 0.8));
+      ctx.fillStyle = g;
+      ctx.fillRect(px, py, ts, ts);
+      ctx.fillStyle = th.waterHi;
+      ctx.globalAlpha = 0.55;
+      for (let i = 0; i < 3; i++) {
+        const wy = py + ((i * 5.3 + t * 3 + h1 * 9) % 14) * p + p;
+        const wx = px + ((i * 7 + h2 * 8 + Math.sin(t + i) * 2) % 10) * p;
+        ctx.fillRect(wx, wy, p * (3 + i), p * 0.9);
+      }
+      ctx.globalAlpha = 1;
+      // 岸邊泡沫
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      if (nb.n && nb.n !== "~") ctx.fillRect(px, py, ts, p * 1.3);
+      if (nb.w && nb.w !== "~") ctx.fillRect(px, py, p * 1.3, ts);
+      if (nb.e && nb.e !== "~") ctx.fillRect(px + ts - p * 1.3, py, p * 1.3, ts);
+      if (nb.s && nb.s !== "~") ctx.fillRect(px, py + ts - p * 1.3, ts, p * 1.3);
+      if (chapter === 3 && h3 > 0.8 && Math.sin(t * 2 + x) > 0.4) {
+        ctx.fillStyle = "#fff3b0";
+        ctx.fillRect(px + p * 6, py + p * 6, p * 2, p * 2);
+      }
+      return;
+    }
+
+    // ---------------- 橋 ----------------
+    if (tileType === "=") {
+      const g = ctx.createLinearGradient(px, py, px, py + ts);
+      g.addColorStop(0, "#c68a4c"); g.addColorStop(1, "#8a5a2b");
+      ctx.fillStyle = "rgba(0,0,0,0.25)";
+      ctx.fillRect(px, py + p * 14, ts, p * 2);
+      ctx.fillStyle = g;
+      ctx.fillRect(px, py + p * 2, ts, p * 12);
+      ctx.fillStyle = "rgba(60,30,10,0.55)";
+      for (let i = 0; i < 4; i++) ctx.fillRect(px + p * (i * 4 + 3.5), py + p * 2, p * 0.8, p * 12);
+      ctx.fillStyle = "#e8b878";
+      ctx.fillRect(px, py + p * 2, ts, p);
+      ctx.fillStyle = "#5a3a1a";
+      ctx.fillRect(px, py + p * 13, ts, p);
+      ctx.fillRect(px + p, py, p * 1.5, p * 3);
+      ctx.fillRect(px + ts - p * 2.5, py, p * 1.5, p * 3);
+      return;
+    }
+
+    // ---------------- 地面 ----------------
+    this.groundTile(ctx, th, x, y, px, py, ts);
+
+    if (tileType !== "#") {
+      // 地表細節：草簇、花、小石、龜裂
+      if (h1 > 0.45) {
+        const bx = px + p * (2 + h2 * 11), by = py + p * (4 + h3 * 9);
+        if (chapter === 1) {
+          ctx.fillStyle = th.dark;
+          ctx.fillRect(bx, by, p, p * 2.2); ctx.fillRect(bx + p * 1.5, by + p * 0.5, p, p * 1.7); ctx.fillRect(bx - p * 1.4, by + p * 0.6, p, p * 1.6);
+          ctx.fillStyle = "#a6ec86";
+          ctx.fillRect(bx, by, p, p * 0.8);
+        } else if (chapter === 2) {
+          ctx.fillStyle = th.dark; ctx.fillRect(bx, by, p * 2, p * 0.8);
+          ctx.fillStyle = th.fleck[0]; ctx.fillRect(bx + p, by - p, p * 1.2, p);
+        } else if (chapter === 3) {
+          ctx.strokeStyle = th.dark; ctx.lineWidth = Math.max(1, p * 0.7);
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + p * 2.5, by + p * 1.5); ctx.lineTo(bx + p * 3.5, by + p * 0.2); ctx.stroke();
+        } else if (chapter === 4) {
+          ctx.fillStyle = th.dark; ctx.fillRect(bx, by + p, p * 3, p * 0.9);
+          ctx.fillStyle = th.fleck[1]; ctx.fillRect(bx + p, by, p, p);
+        } else {
+          ctx.fillStyle = th.dark; ctx.fillRect(bx, by, p * 2, p * 1.2);
+        }
+      }
+      if (h2 > 0.82) {
+        const fx = px + p * (3 + h3 * 10), fy = py + p * (3 + h1 * 10);
+        ctx.fillStyle = th.fleck[Math.floor(h1 * 100) % th.fleck.length];
+        ctx.fillRect(fx, fy, p * 1.4, p * 1.4);
+        if (chapter === 1) { ctx.fillStyle = "#fff7c2"; ctx.fillRect(fx + p * 0.4, fy + p * 0.4, p * 0.6, p * 0.6); }
+      }
+      if (h3 > 0.93) {
+        ctx.fillStyle = this.tint(th.dark, 1.05);
+        ctx.fillRect(px + p * 9, py + p * 10, p * 3, p * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.fillRect(px + p * 9, py + p * 10, p * 3, p * 0.8);
+      }
+      return;
+    }
+
+    // ---------------- 牆體：章節專屬地形 ----------------
+    // 落影
+    ctx.fillStyle = th.shadow;
+    ctx.beginPath(); ctx.ellipse(px + ts * 0.52, py + ts * 0.9, ts * 0.46, ts * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (chapter === 1) {
+      // 圓潤樹冠 (三層明暗) + 樹幹
+      ctx.fillStyle = th.trunk;
+      ctx.fillRect(px + p * 6.5, py + p * 10, p * 3, p * 5.5);
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(px + p * 8.5, py + p * 10, p, p * 5.5);
+      const cx = px + ts * 0.5, cy = py + ts * 0.42 + sway * p * 0.2;
+      const blobs = [[-3.2, 1.2, 5.6], [3.2, 1.6, 5.2], [0, -2.4, 6.4], [0, 2.6, 5]];
+      blobs.forEach(([ox, oy, r], i) => {
+        const g = ctx.createRadialGradient(cx + (ox - 1.5) * p, cy + (oy - 2) * p, p, cx + ox * p, cy + oy * p, r * p);
+        g.addColorStop(0, "#7be38a"); g.addColorStop(0.5, "#2f9e44"); g.addColorStop(1, "#13532a");
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(cx + ox * p, cy + oy * p, r * p, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      ctx.fillRect(cx - p * 2, cy - p * 5, p * 3, p); ctx.fillRect(cx + p * 2, cy - p * 3, p * 2, p);
+    } else if (chapter === 2) {
+      if (h1 > 0.5) {
+        // 棕櫚樹
+        ctx.strokeStyle = th.trunk; ctx.lineWidth = p * 2; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(px + p * 8, py + p * 15); ctx.quadraticCurveTo(px + p * 9 + sway * p, py + p * 9, px + p * 8 + sway * p * 1.5, py + p * 4); ctx.stroke();
+        const tx0 = px + p * 8 + sway * p * 1.5, ty0 = py + p * 4;
+        for (let i = 0; i < 6; i++) {
+          const a = -Math.PI + (i / 5) * Math.PI;
+          ctx.strokeStyle = i % 2 ? "#2f9e44" : "#51cf66"; ctx.lineWidth = p * 1.6;
+          ctx.beginPath(); ctx.moveTo(tx0, ty0);
+          ctx.quadraticCurveTo(tx0 + Math.cos(a) * p * 4, ty0 + Math.sin(a) * p * 4 - p * 2, tx0 + Math.cos(a) * p * 7, ty0 + Math.sin(a) * p * 2 + p * 3); ctx.stroke();
+        }
+      } else {
+        // 海岸礁石
+        [[4, 13, 4.4, 8], [9.5, 13, 4, 6]].forEach(([ox, bY, w, hh]) => {
+          const g = ctx.createLinearGradient(0, py + p * (bY - hh), 0, py + p * bY);
+          g.addColorStop(0, "#eef3f7"); g.addColorStop(1, "#6d8aa3");
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.moveTo(px + p * (ox - w), py + p * bY); ctx.quadraticCurveTo(px + p * (ox - w * 0.6), py + p * (bY - hh), px + p * ox, py + p * (bY - hh)); ctx.quadraticCurveTo(px + p * (ox + w * 0.8), py + p * (bY - hh * 0.6), px + p * (ox + w), py + p * bY); ctx.fill();
+        });
+      }
+    } else if (chapter === 3) {
+      // 熔岩尖岩
+      const g = ctx.createLinearGradient(px, 0, px + ts, 0);
+      g.addColorStop(0, "#a8714a"); g.addColorStop(0.55, "#6b3f2a"); g.addColorStop(1, "#2f1a10");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(px + p, py + p * 15); ctx.lineTo(px + p * 3.5, py + p * 7); ctx.lineTo(px + p * 6.5, py + p * 3.5); ctx.lineTo(px + p * 8, py - p * 1);
+      ctx.lineTo(px + p * 10.5, py + p * 5); ctx.lineTo(px + p * 13, py + p * 9); ctx.lineTo(px + p * 15, py + p * 15); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = `rgba(251,146,60,${0.6 + Math.sin(animFrame * 0.1 + x) * 0.25})`; ctx.lineWidth = Math.max(1.2, p * 0.9);
+      ctx.beginPath(); ctx.moveTo(px + p * 7.5, py + p * 13); ctx.lineTo(px + p * 8.5, py + p * 9); ctx.lineTo(px + p * 7.5, py + p * 6); ctx.stroke();
+    } else if (chapter === 4) {
+      if (h1 > 0.45) {
+        // 雪松
+        ctx.fillStyle = th.trunk; ctx.fillRect(px + p * 7, py + p * 12, p * 2, p * 3.5);
+        for (let i = 0; i < 3; i++) {
+          const y1 = py + p * (13 - i * 3.6), wd = p * (6.5 - i * 1.5), y0 = y1 - p * 5;
+          const g = ctx.createLinearGradient(0, y0, 0, y1);
+          g.addColorStop(0, "#3d8a68"); g.addColorStop(1, "#1d5a42");
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.moveTo(px + p * 8 - wd, y1); ctx.lineTo(px + p * 8, y0); ctx.lineTo(px + p * 8 + wd, y1); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath(); ctx.moveTo(px + p * 8 - wd * 0.7, y1 - p * 1.8); ctx.lineTo(px + p * 8, y0); ctx.lineTo(px + p * 8 + wd * 0.7, y1 - p * 1.8); ctx.quadraticCurveTo(px + p * 8, y1 - p * 0.6, px + p * 8 - wd * 0.7, y1 - p * 1.8); ctx.fill();
+        }
+      } else {
+        // 冰晶
+        [[5, 14, 2.2, 9], [10, 14, 2.6, 11], [7.5, 14, 1.8, 6]].forEach(([ox, bY, w, hh]) => {
+          const g = ctx.createLinearGradient(0, py + p * (bY - hh), 0, py + p * bY);
+          g.addColorStop(0, "#f2fbff"); g.addColorStop(1, "#4aa3e8");
+          ctx.fillStyle = g; ctx.globalAlpha = 0.92;
+          ctx.beginPath(); ctx.moveTo(px + p * (ox - w), py + p * bY); ctx.lineTo(px + p * (ox - w * 0.6), py + p * (bY - hh * 0.78)); ctx.lineTo(px + p * ox, py + p * (bY - hh)); ctx.lineTo(px + p * (ox + w * 0.6), py + p * (bY - hh * 0.78)); ctx.lineTo(px + p * (ox + w), py + p * bY); ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+      }
+    } else {
+      // 紫晶結晶柱
+      [[4.5, 14, 2, 8, -0.12], [11, 14, 2.2, 9.5, 0.1], [8, 14, 2.8, 13, 0]].forEach(([ox, bY, w, hh, rot]) => {
+        ctx.save(); ctx.translate(px + p * ox, py + p * bY); ctx.rotate(rot);
+        const g = ctx.createLinearGradient(-p * w, 0, p * w, 0);
+        g.addColorStop(0, "#f0e1ff"); g.addColorStop(0.5, "#a855f7"); g.addColorStop(1, "#4c1d95");
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(-p * w, 0); ctx.lineTo(-p * w, -p * hh * 0.78); ctx.lineTo(0, -p * hh); ctx.lineTo(p * w, -p * hh * 0.78); ctx.lineTo(p * w, 0); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = Math.max(1, p * 0.5);
+        ctx.beginPath(); ctx.moveTo(0, -p * hh); ctx.lineTo(0, 0); ctx.stroke();
+        ctx.restore();
+      });
     }
   }
 }
