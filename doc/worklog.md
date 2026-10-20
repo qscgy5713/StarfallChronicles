@@ -1,0 +1,72 @@
+# 《星隕編年史：霧海遺城》工作日誌 (`doc/worklog.md`)
+
+## 2026-10-20
+- **完成第四階段：HD-2D 像素美術、動態點光源與戰鬥舞台視覺全面升級**：
+  1. **五大章節專屬 16-Bit 牆體材質、立體接地暗邊與石板地磚細節 (`StarfallChronicles/js/pixel_art.js`)**：
+     - 重繪 `drawTerrainTile()`，將原本第 2～5 章共用的平面灰牆全面改為五章專屬像素構造：Ch.1 多層次翠綠古樹冠與深褐樹幹、Ch.2 深海青銅砌石與黃銅鉚釘水苔、Ch.3 黑曜石柱與呼吸閃爍的赤金熔岩裂紋、Ch.4 浮空星象白金聖柱與青藍星晶核心、Ch.5 王城紫紅黑曜巨柱與金冠雕飾。
+     - 地磚 (`.`) 加入石板接縫內框線與章節微粒點綴；水域/熔岩/星淵 (`~`) 與古橋 (`=`) 升級多層次波紋與雙護欄細節。
+  2. **地圖 HD-2D 動態點光源光暈、牆簷立體落影與武器附魔光環 (`StarfallChronicles/js/ui.js`)**：
+     - 於 `drawCanvas()` 為牆體正下方的地磚加上頂緣牆簷落影，並於近景跟隨模式加入柔和的 HD-2D 視覺暗角 (`Vignette`) 與主角照明光暈。
+     - 於 `drawPixelTileObject()` 為營火 (`F`)、星泉池 (`D`)、星軌躍遷陣 (`O`)、遠古聖棺 (`U`)、試煉碑 (`V`)、已點亮星碑 (`S`)、傳送陣 (`P`) 與首領 (`B`) 繪製隨時間呼吸的彩色點光源 (`createRadialGradient`)，並為所有立體角色與物件加上腳底陰影與微幅浮動動畫。
+     - 主角外框光環會即時反映當前 `[E]` 武器五屬性附魔色澤（物理金、星輝藍、烈焰橘、寒霜冰藍、虛空紫）。
+  3. **多層次章節主題戰鬥舞台與五屬性交叉斬擊特效 (`StarfallChronicles/js/ui.js`)**：
+     - 重構 `drawBattleScene()`：繪製五章專屬漸層星夜天幕、動態閃爍星辰、天際星月光輪、遠景建築剪影、透視格線地坪、敵方韌性護盾能量光罩，以及依攻擊屬性變色的彈道與雙重交叉斬擊光束。
+  4. **16-Bit 皇家星盤風格介面質感 (`StarfallChronicles/css/style.css`)**：
+     - 升級深空星雲放射背景、雙層金邊金屬浮雕面板、高光漸層生命/星力/極限計量條與畫布外框光暈。
+- **修復 `星隕編年史.app` / `啟動星隕編年史.command` 無法雙擊開啟與左上角標題點擊反應**：
+  - **問題原因**：
+    1. `星隕編年史.app/Contents/MacOS/StarfallLauncher` 與 `啟動星隕編年史.command` 原始權限為 `-rw-r--r--`（缺少 `+x` 執行權限）且帶有 macOS 隔離屬性 (`xattr`)，且 `StarfallLauncher` 直接呼叫 Chrome 執行檔在 Chrome 已開啟時可能無反應。
+    2. 遊戲畫面左上角的「星隕編年史：霧海遺城」標題區塊 (`.brand-box`) 原本未綁定 `onclick` 事件。
+  - **修正方式**：
+    1. 簡化 `StarfallLauncher` 與 `啟動星隕編年史.command` 改用 macOS 原生 `open "$HTML_PATH"` 開啟預設瀏覽器，並賦予 `chmod +x` 執行權限、`xattr -cr` 清除隔離屬性與 `codesign --force --deep --sign -` 簽署。
+    2. 為 `StarfallChronicles/index.html` 的 `.brand-box` 加上 `onclick="window.gameUI.openModal('intro')"` 與 `cursor: pointer`，點擊標題即可開啟世界觀與玩法指南。
+- **完成第三階段：`40x28` 史詩級巨型迷宮 × 探索度獎勵 × 武器元素附魔 `[E]` × 完美防禦反擊**：
+  1. **地城規模再次擴張至 `40x28`（單張地圖 1,120 格，較初版擴大整整 4 倍，全 15 區共 16,800 格）**：
+     - 於 `StarfallChronicles/js/engine.js` 擴充 `expandZoneToLargeMap()` 與 `enterAbyss()`，在原有的主幹區、東翼秘境、南翼遺跡之外，再新增「**極東星界聖殿 (`x: 32..39`)**」與「**極淵地下墓穴 (`y: 22..27`)**」。
+     - 於 `StarfallChronicles/js/ui.js` 將全景模式縮放調整為 `22px`（完整容納 `40x28` 巨型迷宮），並將右上角雷達小地圖調整為 `mmScale = 3` 且即時顯示「**當前區域探索度百分比 (`探索 XX%`)**」。
+  2. **新增兩大高回饋探索地標：`O` 星軌躍遷陣 (`warp_pad`) 與 `U` 遠古星魂聖棺 (`ancient_reliquary`) + 區域探索大師獎勵**：
+     - 於 `StarfallChronicles/js/pixel_art.js` 新增 `warp_pad` 與 `ancient_reliquary` 16x16 像素圖塊。
+     - **星軌躍遷陣 (`O`)**：每張巨型地圖配置成對雙向傳送陣（東翼北樞 `(21,3)` <-> 極淵墓穴 `(36,24)`），方便玩家在 `40x28` 巨型迷宮中快速穿梭。
+     - **遠古星魂聖棺 (`U`)**：每區配置 2 座遠古聖棺，啟封後永久提升主角最大生命 `+15`、基礎攻擊 `+2`、基礎防禦 `+1` 並獲得 `+80G` 與 `+65 EXP`。
+     - **區域探索里程碑獎勵**：當單一子區域探索度達到 `55%` 時，自動頒發【區域探索大師獎勵】（`+90 金幣、+60 EXP、星辰碎晶 x2`）。
+  3. **戰鬥戰術再升級：`[E]` 武器五屬性自由附魔 (`cycleWeaponElement`) 與【完美星紋防禦反擊 (Perfect Guard Counter)】**：
+     - **`[E]` 武器五屬性自由附魔**：隨時可按 `[E]` 或點擊頂部/戰鬥按鈕，將武器在「物理 / 星輝 / 烈焰 / 寒霜 / 虛空」五種屬性間自由切換，使基礎戰技「星芒斬」與「破甲重刺」轉化為該屬性，隨時可針對敵人弱點破盾或銜接異屬性「元素共鳴連攜」。
+     - **完美星紋防禦反擊 (Perfect Guard Counter)**：當敵方預告「強擊 (`heavy`)」或處於「蓄力強化 (`atkBuff`)」時，玩家施展「星紋防禦 (`guard`)」不僅大幅減傷，還會在敵方出手瞬間觸發【完美防反】，回敬 `105% ATK` 反擊傷害、額外擊碎 `1` 點護盾並獲得 `+20` 極限星能。
+  4. **自我 Code Review 與自動化測試**：
+     - 檢查並確保 `findGuidePath` 預設繞開 `O`（避免尋路途中誤觸瞬移陣偏離路線）與 `U`，並在 `deserialize` 補齊 `weaponElement` 與 `zoneMasteryClaimed` 相容預設值。
+     - 擴充並執行 `node StarfallChronicles/tests/test_game.js`，8 大自動化測試套件全數 100% 通過。
+- **完成第二階段：超大型捲動地城 (`32x22`) 與高互動遊戲性升級**：
+  1. **全面擴建 `32x22` 大型多翼迷宮地圖（面積擴大 2.5 倍以上）**：
+     - 於 `StarfallChronicles/js/engine.js` 實作 `expandZoneToLargeMap(chapterNum, subZone)`，將全 15 個子區域及無盡星淵從 `20x14`（280 格）擴展為 `32x22`（704 格，15 區共計 10,560 格），新增「東翼秘境迴廊」、「南翼深淵遺跡」與隱藏秘寶室。
+     - 於 `StarfallChronicles/js/ui.js` 將中央畫布升級為 `960x640`，實作「平滑跟隨鏡頭 (Smooth Camera Follow)」、「`[M]` 鍵 32x22 全景俯瞰切換」與右上角「即時像素小地圖雷達 (`drawMinimap`，支援點擊小地圖直接尋路)」。
+  2. **新增動態探索機制：`[Q] 星輝脈衝`、裂隙秘牆、地脈陷阱、星泉祝福與巡邏魔物**：
+     - 於 `StarfallChronicles/js/pixel_art.js` 新增 `secret_wall` (`W`)、`trap_spike` (`T`)、`fountain` (`D`)、`obelisk_trial` (`V`) 四款 16x16 像素圖塊。
+     - 實作 `castAstralPulse()`（`[Q]` 鍵）：可震碎 3 格內隱藏裂隙牆 `W`、淨化拆除地脈陷阱 `T` 換取星辰碎晶與經驗值、賦予 8 步 `+3` 視野，並震懾 3 格內魔物 4 步。
+     - 實作 `stepRoamingEnemies()`：迷宮東翼與南翼的巡邏魔物會隨步伐動態巡邏。
+  3. **戰鬥深度三大進化：先制奇襲 (Ambush)、四大元素共鳴連攜 (Elemental Combo)、`[C]` 星靈主動協同大招**：
+     - **先制奇襲 (Ambush)**：接觸被星輝脈衝震懾的魔物開戰時，直接削減敵人 15% 最大生命、擊碎 1 點護盾並獲得 +25 極限星能。
+     - **元素共鳴連攜**：連續兩回合施展不同屬性戰技時，自動觸發【星火超載】、【永凍碎裂】、【熾刃連斬】或【星界共鳴】，造成額外傷害與破盾/回魔/護甲效果。
+     - **`[C]` 星靈主動協同大招 (`castCompanionSkill`)**：隨行星靈充能 100% 時可免費施放不耗回合的專屬大招（露米・星露聖域、奧利弗・解構光束、伊格・紅蓮龍息、瑟拉・星穹壁壘）。
+  4. **自我 Code Review 與測試驗證**：
+     - 檢查並加深主幹區與東翼/南翼連接走廊打通格數、補齊 `castAstralPulse` 經驗值升級判定與 `deserialize` 新狀態向下相容預設值。
+     - 擴充並執行 `node StarfallChronicles/tests/test_game.js`（7 大測試套件全數 100% 通過）。
+
+## 2026-10-19
+- **完成 v3.0 Director's Cut 完整遊戲性擴充與自我 Code Review**：
+  - **15 張獨立手繪迷宮地圖（5 章 × 3 子區域）**：於 `StarfallChronicles/js/data.js` 與 `js/engine.js` 實作 `subZone: 1 | 2 | 3` 雙向區域傳送階梯（`>` 與 `<`），徹底解決原本第 2～5 章複製貼上同一張地圖的問題，每章皆具備「外圍據點 -> 中層機關迷宮 -> 深層首領聖殿」三段式探索結構，並於 `js/pixel_art.js` 新增 `stairs_next` 與 `stairs_prev` 16x16 像素圖。
+  - **真實戰爭迷霧與手札線索解謎**：預設關閉全圖金色路線外掛（改為可由玩家主動切換的「星輝羅盤導引」），未探索之迷霧格隱藏物件名牌與懸停劇透；密碼終端（`clueLoreId`）改為需先在迷宮中尋獲並閱讀對應的《星辰手札》卷軸才能查看線索與一鍵填入。
+  - **10 項支線委託與 5 大區域菁英首領**：每章新增 2 項支線委託（共 10 項，包含素材採集、手札考據與區域菁英討伐）及專屬支線秘寶裝備（【狼王銀牙護符】、【深淵潮汐鱗甲】、【星穹共鳴指環】、【星核之眸】）。
+  - **五大屬性弱點克制與破盾 (Break) 深度戰鬥**：為全 16 種敵人與首領定義屬性弱點（`physical`、`star`、`fire`、`frost`、`void`），擴充主動技能至 12 招，命中弱點造成 1.25 倍傷害並額外削減 +1 韌性護盾。
+  - **裝備部位淬煉強化 (+1 ～ +5)**：於鍛造工坊頂部新增武器、防具、聖物三大部位的星紋淬煉強化系統，更換新裝備時永久保留部位強化等級（每級提升穿戴裝備全屬性 +15% 與保底加成）。
+  - **主動自我 Code Review 與問題修復**：
+    1. *破盾 (Break) 回合持續時間問題*：原本 `damageEnemyShield` 觸發 `brokenThisTurn = true` 後，緊接著執行的 `enemyTurn()` 會在敵人暈眩的同時立即將 `brokenThisTurn` 重設為 `false` 並補滿護盾，導致玩家下一回合無法享受到 `+40%` 破盾易傷。已於 `engine.js` 新增 `breakStunPending` 階段控制，讓敵人當回合暈眩跳過行動後，維持 0 盾與 `brokenThisTurn = true` 直到玩家下一回合出招完畢才重組護盾。
+    2. *UI 與引擎資料結構對齊*：修正 `ui.js` 中 `sideQuests` 物件迭代方式（`Object.values`）、`getUpgradeCost` 回傳欄位（`costGold`、`nextLevel`、`ingredients`）及 `renderObjectiveTracker()` 各章節 1~3 區的主線進度旗標。
+    3. *智能出招技能池對齊*：同步 `engine.js` `autoBattleStep()` 中的 `offensiveSkills` 清單，納入 `lunar_crescent` 與 `heavy_thrust`。
+  - **自動化測試驗收**：執行 `node StarfallChronicles/tests/test_game.js`，6 大驗收項目（零 Emoji 檢查、15 張地圖全互動事件 100% 對齊、跨子區域傳送與古碑架橋、屬性弱點破盾、支線委託回報、裝備部位強化 +1~+5）全數 100% 通過。
+- **問題分析與架構規劃**：
+  - 檢視既有專案結構（`StarfallChronicles/` 下的 `index.html`、`css/style.css`、`js/data.js`、`js/engine.js`、`js/ui.js`、`js/pixel_art.js`、`js/audio.js` 及 `tests/test_game.js`）。
+  - 找出導致遊戲 5 分鐘結束、缺乏遊戲性的三大主因：
+    1. 每章僅有單一 `20x14` 小地圖，且第 2～5 章地圖矩陣與機關座標完全複製貼上。
+    2. 過度自動化外掛（全圖直接畫金色導航線、按空白鍵自動尋路到底與自動出招、密碼直接寫在提示裡並附一鍵填入按鈕、開場視窗可直接跳關）。
+    3. 缺乏支線任務、多區域探索、菁英守衛、屬性弱點克制與裝備強化養成循環。
+  - 建立 `doc/plan.md`、`doc/todo.md`、`doc/worklog.md` 與根目錄 `README.md` 文件骨架（保留原有的 `StarfallChronicles/PRD_AND_ARCHITECTURE.md` 不擅自搬動）。

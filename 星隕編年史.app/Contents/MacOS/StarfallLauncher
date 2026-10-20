@@ -1,0 +1,10 @@
+#!/bin/bash
+# 《星隕編年史：霧海遺城》 macOS 原生啟動器
+APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+HTML_PATH="$APP_DIR/StarfallChronicles/index.html"
+
+if [ -f "$HTML_PATH" ]; then
+  open "$HTML_PATH"
+else
+  osascript -e 'display alert "找不到遊戲主檔案" message "請確認 StarfallChronicles/index.html 與 星隕編年史.app 位於同一個資料夾內。"'
+fi
