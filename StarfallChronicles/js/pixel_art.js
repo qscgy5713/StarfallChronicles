@@ -119,12 +119,30 @@ class PixelArtEngine {
   }
 
   // 於指定位置繪製圖集中的一格；錨點為底部中心，可超出格子向上延伸
-  drawExternalTile(ctx, sheet, index, px, py, size) {
+  drawExternalTile(ctx, sheet, index, px, py, size, filter = null) {
     if (!this.ext || !this.ext.ready || !this.ext.sheets[sheet]) return false;
     const prev = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = false;
     const cols = SHEET_COLS[sheet] || 12;
-    ctx.drawImage(this.ext.sheets[sheet], (index % cols) * 16, Math.floor(index / cols) * 16, 16, 16, Math.floor(px), Math.floor(py), Math.ceil(size), Math.ceil(size));
+    let src = this.ext.sheets[sheet];
+    let sx = (index % cols) * 16, sy = Math.floor(index / cols) * 16;
+    if (filter && typeof document !== "undefined") {
+      // 帶色調濾鏡的圖塊預先繪製到 16x16 離屏畫布並快取
+      this.tintCache = this.tintCache || {};
+      const key = `${sheet}:${index}:${filter}`;
+      if (!this.tintCache[key]) {
+        const tc = document.createElement("canvas");
+        tc.width = 16; tc.height = 16;
+        const tctx = tc.getContext("2d");
+        tctx.imageSmoothingEnabled = false;
+        tctx.filter = filter;
+        tctx.drawImage(src, sx, sy, 16, 16, 0, 0, 16, 16);
+        this.tintCache[key] = tc;
+      }
+      src = this.tintCache[key];
+      sx = 0; sy = 0;
+    }
+    ctx.drawImage(src, sx, sy, 16, 16, Math.floor(px), Math.floor(py), Math.ceil(size), Math.ceil(size));
     ctx.imageSmoothingEnabled = prev;
     return true;
   }
@@ -1578,10 +1596,12 @@ class PixelArtEngine {
     ctx.beginPath(); ctx.ellipse(px + ts * 0.52, py + ts * 0.9, ts * 0.46, ts * 0.16, 0, 0, Math.PI * 2); ctx.fill();
 
     const treeIdx = [4, 16, 28, 5, 4, 16][Math.floor(h1 * 6) % 6];
-    if (chapter === 1 && this.ext && this.ext.ready) {
+    // 第 1 章原色森林；第 4 章染成霜白冰藍的雪松、第 5 章染成紫晶色的詭異樹木
+    const TREE_TINT = { 1: null, 4: "hue-rotate(95deg) saturate(0.8) brightness(1.7)", 5: "hue-rotate(205deg) saturate(1.6) brightness(0.9)" };
+    if (chapter in TREE_TINT && this.ext && this.ext.ready) {
       // Kenney CC0 樹木素材：略放大並向上延伸，營造茂密森林
       const tsz = ts * 1.3;
-      this.drawExternalTile(ctx, "town", treeIdx, px - (tsz - ts) / 2, py - (tsz - ts) + ts * 0.04, tsz);
+      this.drawExternalTile(ctx, "town", treeIdx, px - (tsz - ts) / 2, py - (tsz - ts) + ts * 0.04, tsz, TREE_TINT[chapter]);
     } else if (chapter === 1) {
       // 圓潤樹冠 (三層明暗) + 樹幹
       ctx.fillStyle = th.trunk;

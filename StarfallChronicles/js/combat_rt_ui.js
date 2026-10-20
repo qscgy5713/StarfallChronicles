@@ -402,22 +402,53 @@ const GameUIRT = {
     const cy = gy + ts / 2;
     const af = this.animFrame;
 
-    // 預警範圍：由內向外填滿，填滿瞬間命中
+    // 預警範圍：由內向外填滿，填滿瞬間命中 (圓形 / 直線衝鋒 / 扇形 / 遠程落點)
     if (m.state === "windup" && m.zone) {
       const prog = 1 - m.t / m.windupMax;
-      const zx = m.zone.x * ts + ts / 2 + ox;
-      const zy = m.zone.y * ts + ts / 2 + oy;
-      const r = m.zone.r * ts;
+      const z = m.zone;
+      const zx = z.x * ts + ts / 2 + ox;
+      const zy = z.y * ts + ts / 2 + oy;
       ctx.save();
-      ctx.fillStyle = `rgba(239, 68, 68, ${0.1 + 0.16 * prog})`;
-      ctx.beginPath(); ctx.arc(zx, zy, r, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = `rgba(248, 113, 113, ${0.18 + 0.3 * prog})`;
-      ctx.beginPath(); ctx.arc(zx, zy, r * prog, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = "rgba(254, 202, 202, 0.95)";
       ctx.lineWidth = 2;
       ctx.setLineDash([7, 5]);
-      ctx.beginPath(); ctx.arc(zx, zy, r, 0, Math.PI * 2); ctx.stroke();
+      const baseFill = `rgba(239, 68, 68, ${0.1 + 0.16 * prog})`;
+      const progFill = `rgba(248, 113, 113, ${0.18 + 0.3 * prog})`;
+      if (z.shape === "line") {
+        ctx.translate(zx, zy);
+        ctx.rotate(Math.atan2(z.dy, z.dx));
+        const L = z.len * ts, W = z.w * ts;
+        ctx.fillStyle = baseFill; ctx.fillRect(0, -W / 2, L, W);
+        ctx.fillStyle = progFill; ctx.fillRect(0, -W / 2, L * prog, W);
+        ctx.strokeRect(0, -W / 2, L, W);
+      } else if (z.shape === "cone") {
+        const ang = Math.atan2(z.dy, z.dx);
+        const r = z.r * ts;
+        ctx.fillStyle = baseFill;
+        ctx.beginPath(); ctx.moveTo(zx, zy); ctx.arc(zx, zy, r, ang - z.half, ang + z.half); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = progFill;
+        ctx.beginPath(); ctx.moveTo(zx, zy); ctx.arc(zx, zy, r * prog, ang - z.half, ang + z.half); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(zx, zy); ctx.arc(zx, zy, r, ang - z.half, ang + z.half); ctx.closePath(); ctx.stroke();
+      } else {
+        const r = z.r * ts;
+        ctx.fillStyle = baseFill;
+        ctx.beginPath(); ctx.arc(zx, zy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = progFill;
+        ctx.beginPath(); ctx.arc(zx, zy, r * prog, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(zx, zy, r, 0, Math.PI * 2); ctx.stroke();
+      }
       ctx.restore();
+      // 遠程彈：能量球由魔物飛向落點
+      if (m.proj) {
+        const fxp = cx + (zx - cx) * Math.min(1, prog * 1.15);
+        const fyp = cy + (zy - cy) * Math.min(1, prog * 1.15) - Math.sin(Math.min(1, prog * 1.15) * Math.PI) * ts * 0.7;
+        ctx.save();
+        ctx.fillStyle = "#fca5a5";
+        ctx.shadowColor = "#ef4444";
+        ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.arc(fxp, fyp, 6 + prog * 3, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
     }
 
     let offX = 0, offY = 0;
@@ -510,6 +541,28 @@ const GameUIRT = {
       ctx.beginPath(); ctx.arc(mx, my, ts * (0.4 + prog * 0.6), -2.4 + prog * 1.2, -0.6 + prog * 1.2); ctx.stroke();
       ctx.restore();
       c.slashAnim--;
+    }
+    // 浮動傷害數字：向上飄升並淡出
+    if (c.pops && c.pops.length) {
+      ctx.textAlign = "center";
+      for (let i = c.pops.length - 1; i >= 0; i--) {
+        const p = c.pops[i];
+        const life = p.big ? 54 : 42;
+        const k = p.age / life;
+        const bx = (p.target === "hero" ? hx : mx) + p.dx;
+        const by = (p.target === "hero" ? hy - ts * 0.5 : my - ts * 0.55) - k * 46 - Math.sin(Math.min(1, k * 3) * Math.PI) * 8;
+        const sz = p.big ? 22 : 15;
+        ctx.font = `bold ${Math.round(sz * (1 + Math.max(0, 0.35 - k) * 1.2))}px 'PingFang TC', monospace`;
+        ctx.globalAlpha = Math.max(0, 1 - Math.max(0, k - 0.6) / 0.4);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#090d16";
+        ctx.strokeText(p.text, bx, by);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, bx, by);
+        ctx.globalAlpha = 1;
+        p.age++;
+        if (p.age >= life) c.pops.splice(i, 1);
+      }
     }
     if (c.fx && c.fx.ticks > 0) {
       const rise = (34 - c.fx.ticks) * 1.1;

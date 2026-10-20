@@ -3366,6 +3366,10 @@ class StarfallEngine {
       this.combat.shake = 14;
       this.combat.slashAnim = 16;
       this.combat.projAnim = { type: effectiveType, ticks: 16 };
+      if (rt) {
+        this.rtPop(dmg, isCrit ? "#facc15" : isWeakness ? "#fb923c" : "#e2e8f0", "enemy", isCrit || isWeakness);
+        rt.freeze = Math.max(rt.freeze || 0, isCrit || brokeNow || partBreakTag ? 0.12 : 0.05);
+      }
       this.combat.fx = {
         text: `${comboName ? `[${comboName}] ` : ""}${isWeakness ? "WEAK! " : ""}${isCrit ? "CRIT " : ""}-${dmg}${brokeNow ? " BREAK!" : ""}${partBreakTag}`,
         color: partBreakTag ? "#facc15" : comboName ? "#c084fc" : isWeakness ? "#fb923c" : isCrit ? "#facc15" : "#38bdf8",
@@ -3530,10 +3534,12 @@ class StarfallEngine {
       this.state.x = zObj.startPos.x;
       this.state.y = zObj.startPos.y;
     }
+    const goldLoss = Math.floor(this.state.gold * 0.15);
+    this.state.gold -= goldLoss;
     this.recalcStats(true);
-    this.log(`[返回營火] 你在與【${enemyName}】的戰鬥中力竭，微光古墜將你傳送回本區起點並恢復了全部體力。`, "warn");
+    this.log(`[返回營火] 你在與【${enemyName}】的戰鬥中力竭，微光古墜將你傳送回本區起點並恢復了全部體力${goldLoss > 0 ? `，但遺失了 ${goldLoss} 金幣` : ""}。`, "warn");
     if (typeof window !== "undefined" && window.gameUI) {
-      window.gameUI.showToast("[營火甦醒] 已恢復全部體力，可升級天賦或強化裝備後再戰！", "warn");
+      window.gameUI.showToast(`[營火甦醒] 已恢復全部體力${goldLoss > 0 ? `，遺失 ${goldLoss} 金幣` : ""}，可升級天賦或強化裝備後再戰！`, "warn");
     }
   }
 

@@ -6,6 +6,11 @@
  */
 const RT_BEAT = 2.0; // 狀態/星靈/回魔的結算節拍 (秒)；原「回合」類持續時間以節拍計
 const RT_WALKABLE = ".=";
+// 以遠程彈幕攻擊的魔物 (預警圈落在主角所在位置，需要移動躲避)
+const RT_RANGED = new Set([
+  "tide_siren", "astral_wraith", "star_inquisitor", "ash_drake",
+  "elite_twin_inquisitor", "boss_chronos", "boss_astra", "boss_moebius"
+]);
 
 const StarfallRT = {
   rtInit(coord) {
@@ -23,6 +28,66 @@ const StarfallRT = {
 
   rtDist(ax, ay, bx, by) {
     return Math.hypot(ax - bx, ay - by);
+  },
+
+  // 預警範圍判定：circle 圓形 / line 直線衝鋒 / cone 扇形
+  rtInZone(z, hx, hy) {
+    const px = hx - z.x, py = hy - z.y;
+    if (z.shape === "line") {
+      const t = Math.max(0, Math.min(z.len, px * z.dx + py * z.dy));
+      return Math.hypot(px - z.dx * t, py - z.dy * t) <= z.w / 2 + 0.25;
+    }
+    const d = Math.hypot(px, py);
+    if (z.shape === "cone") {
+      if (d > z.r) return false;
+      if (d < 0.01) return true;
+      return (px * z.dx + py * z.dy) / d >= Math.cos(z.half);
+    }
+    return d <= z.r;
+  },
+
+  // 依魔物類型與距離挑選攻擊型態；距離不合適時回傳 null (繼續追擊)
+  rtPlanAttack(intent) {
+    const c = this.combat;
+    const rt = c.rt;
+    const hx = this.state.x, hy = this.state.y;
+    const d = this.rtHeroDist();
+    const dx = (hx - rt.mx) / (d || 1), dy = (hy - rt.my) / (d || 1);
+    const ranged = RT_RANGED.has(c.enemyId);
+    const heavy = intent.type === "heavy";
+    if (ranged && heavy && d <= 6.5) return { windup: 1.3, proj: true, zone: { shape: "circle", x: hx, y: hy, r: 1.9 } };
+    if (ranged && !heavy && d >= 2.2 && d <= 6.5) return { windup: 0.95, proj: true, zone: { shape: "circle", x: hx, y: hy, r: 1.35 } };
+    if (heavy && !ranged && d >= 2.4 && d <= 6.5) {
+      return { windup: 1.0, rush: true, zone: { shape: "line", x: rt.mx, y: rt.my, dx, dy, len: Math.min(7, d + 1.5), w: 1.2 } };
+    }
+    if (heavy && d <= 2.1) return { windup: 1.15, zone: { shape: "circle", x: rt.mx, y: rt.my, r: 2.6 } };
+    if (!heavy && (c.isBoss || c.isElite) && c.intentIndex % 2 === 1 && d <= 2.6) {
+      return { windup: 0.85, zone: { shape: "cone", x: rt.mx, y: rt.my, dx, dy, r: 2.9, half: 1.0 } };
+    }
+    if (!heavy && d <= 1.5) return { windup: 0.7, zone: { shape: "circle", x: rt.mx, y: rt.my, r: 1.55 } };
+    return null;
+  },
+
+  // 衝鋒：魔物沿直線衝到終點 (遇牆或主角前停下)
+  rtRushMonster(zone) {
+    const rt = this.combat.rt;
+    let lx = rt.mx, ly = rt.my;
+    for (let k = 1; k <= Math.round(zone.len); k++) {
+      const x = Math.round(zone.x + zone.dx * k), y = Math.round(zone.y + zone.dy * k);
+      if (!this.rtWalkable(x, y) || (x === this.state.x && y === this.state.y)) break;
+      lx = x; ly = y;
+    }
+    rt.mx = lx;
+    rt.my = ly;
+  },
+
+  // 浮動傷害數字 (target: enemy 於魔物頭上、hero 於主角頭上)
+  rtPop(text, color, target = "enemy", big = false) {
+    const c = this.combat;
+    if (!c) return;
+    c.pops = c.pops || [];
+    c.pops.push({ text: String(text), color, target, big, age: 0, dx: (Math.random() - 0.5) * 26 });
+    if (c.pops.length > 24) c.pops.shift();
   },
 
   rtHeroDist() {
@@ -134,9 +199,10 @@ const StarfallRT = {
     const c = this.combat;
     const rt = c.rt;
     const comp = this.getComputedStats();
-    const inZone = this.rtDist(this.state.x, this.state.y, zone.x, zone.y) <= zone.r;
+    const inZone = this.rtInZone(zone, this.state.x, this.state.y);
     if (!inZone) {
       c.fx = { text: "MISS", color: "#94a3b8", ticks: 18 };
+      this.rtPop("閃避", "#94a3b8", "hero");
       if (c.enemyStatuses.atkBuff > 0) c.enemyStatuses.atkBuff--;
       return;
     }
@@ -157,6 +223,8 @@ const StarfallRT = {
       this.state.burst = Math.min(100, this.state.burst + 22);
       this.state.stats.foresightCounters = (this.state.stats.foresightCounters || 0) + 1;
       c.fx = { text: `氣刃大迴旋! -${counterDmg} [${spNames[this.state.spiritLevel]}]`, color: "#f43f5e", ticks: 32 };
+      this.rtPop(counterDmg, "#f43f5e", "enemy", true);
+      rt.freeze = 0.14;
       c.shake = 16;
       c.slashAnim = 16;
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("burst");
@@ -191,6 +259,8 @@ const StarfallRT = {
     this.state.hp = Math.max(0, this.state.hp - dmg);
     this.state.burst = Math.min(100, this.state.burst + 12);
     rt.fleeT = 0;
+    rt.freeze = Math.max(rt.freeze || 0, 0.08);
+    this.rtPop(`-${dmg}`, "#ef4444", "hero", true);
     if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("hit");
     c.log.push(
       `[敵方攻擊] ${c.name} 施展【${intent.label}】，造成 ${dmg} 點傷害${blocked > 0 ? `（護甲抵擋 ${blocked} 點）` : ""}！`
@@ -206,6 +276,7 @@ const StarfallRT = {
       this.state.burst = Math.min(100, this.state.burst + 20);
       this.state.stats.perfectCounters = (this.state.stats.perfectCounters || 0) + 1;
       c.fx = { text: `PERFECT COUNTER! -${counterDmg}`, color: "#facc15", ticks: 30 };
+      this.rtPop(counterDmg, "#facc15", "enemy", true);
       c.shake = 14;
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("burst");
       c.log.push(`[完美防反 COUNTER!] 精準架開強擊，回敬 ${counterDmg} 點傷害、擊碎 1 點護盾並獲得 +20 極限星能！`);
@@ -232,6 +303,7 @@ const StarfallRT = {
         const heal = Math.max(6, Math.round(this.state.maxHp * 0.08));
         this.state.hp = Math.min(this.state.maxHp, this.state.hp + heal);
         this.state.mp = Math.min(this.state.maxMp, this.state.mp + 5);
+        this.rtPop(`+${heal}`, "#4ade80", "hero");
       } else if (petId === "oliver") {
         if (c.enemyShield > 0) this.damageEnemyShield(1);
       } else if (petId === "iggy") {
@@ -339,14 +411,16 @@ const StarfallRT = {
 
     if (m.state === "chase") {
       const intent = c.intents[c.intentIndex % c.intents.length];
-      const reach = intent.type === "heavy" ? 2.1 : 1.5;
       const buffOnly = intent.type === "charge" || intent.type === "shield";
-      if (buffOnly || this.rtHeroDist() <= reach) {
+      const plan = buffOnly ? { windup: 0.8, zone: null } : this.rtPlanAttack(intent);
+      if (plan) {
         m.state = "windup";
         m.intent = intent;
-        m.windupMax = (intent.type === "heavy" ? 1.15 : buffOnly ? 0.8 : 0.7) * speed;
+        m.windupMax = plan.windup * speed;
         m.t = m.windupMax;
-        m.zone = buffOnly ? null : { x: rt.mx, y: rt.my, r: intent.type === "heavy" ? 2.6 : 1.55 };
+        m.zone = plan.zone;
+        m.proj = !!plan.proj;
+        m.rush = !!plan.rush;
       } else if (m.stepT <= 0) {
         this.rtMonsterStep();
         m.stepT = (c.isBoss ? 0.62 : 0.5) * speed;
@@ -368,6 +442,7 @@ const StarfallRT = {
       } else {
         c.slashAnim = 0;
         m.lunge = 10;
+        if (m.rush) this.rtRushMonster(m.zone);
         this.rtResolveStrike(intent, m.zone);
         if (!this.combat) return;
       }
@@ -375,6 +450,8 @@ const StarfallRT = {
       m.state = "recover";
       m.t = (intent.type === "heavy" ? 1.1 : 0.8) * speed;
       m.zone = null;
+      m.proj = false;
+      m.rush = false;
     }
   },
 
@@ -384,6 +461,11 @@ const StarfallRT = {
     if (!c || !c.rt) return;
     dt = Math.min(dt, 0.1);
     const rt = c.rt;
+    // 打擊停頓 (Hit-stop)：命中瞬間短暫凍結戰鬥推進，強化打擊感
+    if (rt.freeze > 0) {
+      rt.freeze -= dt;
+      return;
+    }
     for (const k of ["gcd", "moveCd", "dodgeCd", "potionCd", "sharpenCd", "ivT", "guardT"]) {
       if (rt[k] > 0) rt[k] = Math.max(0, rt[k] - dt);
     }

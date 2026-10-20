@@ -421,6 +421,27 @@ function runTests() {
     assert.strictEqual(rg.fleeCombat(), true, "一般魔物可撤退");
     for (let i = 0; i < 40 && rg.combat; i++) { rt.fleeT > 0 && (rg.combat.rt.m.state = "recover", rg.combat.rt.m.t = 9); rg.rtUpdate(0.05); }
     assert.strictEqual(rg.combat, null, "撤退讀條完成後應脫離戰鬥");
+    // 新攻擊型態：直線衝鋒 / 扇形 / 遠程落點與判定
+    const line = { shape: "line", x: 10, y: 10, dx: 1, dy: 0, len: 5, w: 1.2 };
+    assert.ok(rg.rtInZone(line, 13, 10) && !rg.rtInZone(line, 13, 12) && !rg.rtInZone(line, 17, 10), "直線預警應只命中路徑上的格子");
+    const cone = { shape: "cone", x: 10, y: 10, dx: 1, dy: 0, r: 2.9, half: 1.0 };
+    assert.ok(rg.rtInZone(cone, 12, 10) && !rg.rtInZone(cone, 8, 10) && !rg.rtInZone(cone, 10, 13), "扇形預警應只命中前方扇面");
+    const rg2 = new StarfallEngine(global.window.GAME_DATA);
+    rg2.startCombat({ enemyId: "mist_wolf" }, coord);
+    const rt2 = rg2.combat.rt;
+    rg2.state.x = rt2.mx + 4; rg2.state.y = rt2.my;
+    rg2.combat.intentIndex = 2; // 強擊
+    const plan = rg2.rtPlanAttack(rg2.combat.intents[2]);
+    assert.ok(plan && plan.rush && plan.zone.shape === "line", "近戰魔物在中距離施放強擊應改為直線衝鋒");
+    rg2.state.x = rt2.mx + 4;
+    rg2.startCombat({ enemyId: "tide_siren" }, coord);
+    rg2.state.x = rg2.combat.rt.mx + 4; rg2.state.y = rg2.combat.rt.my;
+    const plan2 = rg2.rtPlanAttack({ type: "attack", mult: 1 });
+    assert.ok(plan2 && plan2.proj && plan2.zone.x === rg2.state.x, "遠程魔物應以主角所在位置為落點發射彈幕");
+    // 死亡懲罰：損失 15% 金幣
+    rg2.state.gold = 200;
+    rg2.loseCombat();
+    assert.strictEqual(rg2.state.gold, 170, "戰敗應損失 15% 金幣");
     console.log("[PASS] Test 11: 即時戰鬥（追擊/預警範圍/冷卻/距離/翻滾無敵/撤退）驗證通過");
   }
 

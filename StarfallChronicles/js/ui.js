@@ -1633,6 +1633,14 @@ class GameUI {
     } else if (type === "save") {
       this.renderSaveModal();
       document.getElementById("modal-save").classList.add("active");
+    } else if (type === "audio") {
+      const ss = window.soundSystem;
+      if (ss) {
+        document.getElementById("vol-music").value = Math.round(ss.musicVol * 100);
+        document.getElementById("vol-sfx").value = Math.round(ss.sfxVol * 100);
+        document.getElementById("btn-mute-modal").textContent = ss.muted ? "全部靜音：開" : "全部靜音：關";
+      }
+      document.getElementById("modal-audio").classList.add("active");
     } else if (type === "canteen") {
       const el = document.getElementById("modal-canteen");
       if (el) el.classList.add("active");
