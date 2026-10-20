@@ -1,7 +1,7 @@
 # 《星隕編年史：霧海遺城》工作日誌 (`doc/worklog.md`)
 
 ## 2026-10-20
-- **地圖上隨時按攻擊鍵打怪**：`onFieldSkill` 對攻擊技能先以 `engine.findNearestEnemy(射程)` 找最近魔物（近戰 4.2 格內自動衝刺、魔法 5.2 格內），找到就 `startCombat` 並立刻 `executeSkill` 出招，不必先碰到魔物；找不到才揮劍氣示意。
+- **地圖上隨時按攻擊鍵打怪**：`onFieldSkill` 對攻擊技能先以 `engine.findNearestEnemy(射程)` 找最近魔物（近戰 4.2 格內自動衝刺、魔法 5.2 格內），找到就 `startCombat` 並立刻 `executeSkill` 出招，不必先碰到魔物；找不到才揮劍氣示意。`findNearestEnemy` 只考慮已探索（迷霧未覆蓋）的魔物格，避免隔牆或在迷霧中打到看不見的怪。
 - **技能列改為常駐底部**：`js/combat_rt_ui.js` 將技能快捷列（1~9 技能、翻滾、星靈、磨刀、附魔、道具、自動、撤退）獨立為 `buildHotbar()`，探索與戰鬥都顯示；戰鬥才有冷卻/距離/弱點提示，非戰鬥時戰鬥專用欄位變暗。探索中按技能：治療技能可直接補血（新增 `castFieldHeal`），其餘揮出劍氣示意並提示「靠近魔物即自動開戰」；`Space`/`1~9` 在探索中同樣有效。原工具列（視角/磨刀/脈衝/附魔/全景/羅盤）縮小並移到技能列上方。魔物狀態面板仍只在戰鬥時出現。
 - **導入 Tiny Creatures（CC0）魔物素材**：經使用者同意，自 OpenGameArt 下載 Clint Bellanger 的 Tiny Creatures（176 KB，16x16、180 種魔物與動物），保留圖集與授權檔於 `StarfallChronicles/assets/kenney/tiny-creatures/`，內嵌為 `js/kenney_assets.js` 的 `creatures`（10 欄，新增 `SHEET_COLS` 處理每圖集欄數）。18 隻魔物（除腐化古樹精沿用內建圖、哨兵沿用 Tiny Dungeon）改用此圖集：狼、狼王、荊棘巨獸（綠色巨怪）、沉沒衛兵、女妖、重甲巨蟹、時之守衛、火焰魔像、灰龍、督軍、赤焰巨龍（真正的紅龍）、怨靈、審判官、星使、黑曜禁衛、統領、噬星者。
 - **戰鬥改為即時制（直接在地圖上進行，移除回合制）**：

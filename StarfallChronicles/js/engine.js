@@ -3126,8 +3126,9 @@ class StarfallEngine {
   // 找出主角附近最近的魔物 (地圖上的 E/B 格)，供探索中直接出招開戰
   findNearestEnemy(maxDist) {
     let best = null;
+    const explored = this.getCurrentExploredMap();
     for (const [coord, ev] of Object.entries(this.activeEvents)) {
-      if (!ev || ev.type !== "enemy") continue;
+      if (!ev || ev.type !== "enemy" || !explored[coord]) continue; // 只能攻擊已探索 (看得到) 的魔物
       const [x, y] = coord.split(",").map(Number);
       const t = this.activeMap[y] && this.activeMap[y][x];
       if (t !== "E" && t !== "B") continue;
