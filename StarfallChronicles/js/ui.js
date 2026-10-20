@@ -1966,78 +1966,59 @@ class GameUI {
       { slot: "relic", name: "聖物部位淬煉", bonusDesc: "每級使穿戴聖物的全屬性提升 +15%（額外保底星力與暴擊加成）", icon: "crystal" }
     ];
 
+    const pips = lv => Array.from({ length: 5 }, (_, i) => `<i class="${i < lv ? "on" : ""}"></i>`).join("");
+    const chipsOf = ing =>
+      Object.entries(ing || {})
+        .map(([ingId, req]) => {
+          const it = this.engine.data.items[ingId];
+          const have = s.inventory[ingId] || 0;
+          return `<span class="ing-chip ${have >= req ? "ok" : "lack"}">${this.px.icon(it ? it.icon : "crystal", 14)} ${it ? it.name : ingId} ${have}/${req}</span>`;
+        })
+        .join("");
+    const lacks = (ing, gold) =>
+      s.gold < gold || Object.entries(ing || {}).some(([id, req]) => (s.inventory[id] || 0) < req);
+
     const upgradeHtml = `
-      <div style="margin-bottom: 12px; padding: 10px; background: rgba(15,23,42,0.75); border: 1px solid rgba(56,189,248,0.35); border-radius: 8px;">
-        <div style="font-size: 13px; font-weight: 800; color: #38bdf8; margin-bottom: 8px;">
-          [星隕淬煉台] 裝備部位強化 (+1 ~ +5，更換裝備仍永久保留部位強化等級)
-        </div>
+      <div class="craft-title">星隕淬煉台 <small>裝備部位強化 +1 ~ +5，更換裝備仍保留等級</small></div>
+      <div class="upg-grid">
         ${slotDefs
           .map(sd => {
             const curLv = (s.equipUpgrades && s.equipUpgrades[sd.slot]) || 0;
             const cost = this.engine.getUpgradeCost(sd.slot);
-            if (!cost) {
-              return `
-                <div class="inv-card equipped" style="margin-bottom: 6px;">
-                  <div class="inv-card-head">
-                    <span>${this.px.icon(sd.icon, 16)} <strong>${sd.name}</strong> <span class="badge-key">+${curLv} (已達最高 +5)</span></span>
-                  </div>
-                  <div class="inv-card-desc">${sd.bonusDesc}</div>
-                </div>
-              `;
-            }
-            let canUpg = s.gold >= cost.costGold;
-            const ingChips = Object.entries(cost.ingredients || {}).map(([ingId, reqCnt]) => {
-              const matItem = this.engine.data.items[ingId];
-              const haveMat = s.inventory[ingId] || 0;
-              if (haveMat < reqCnt) canUpg = false;
-              return `<span class="ing-chip ${haveMat >= reqCnt ? "ok" : "lack"}">
-                ${this.px.icon(matItem ? matItem.icon : "crystal", 14)} ${matItem ? matItem.name : ingId} (${haveMat}/${reqCnt})
-              </span>`;
-            });
-            return `
-              <div class="inv-card" style="margin-bottom: 6px;">
-                <div class="inv-card-head">
-                  <span>${this.px.icon(sd.icon, 16)} <strong>${sd.name}</strong> <span class="badge-cnt">當前 +${curLv} -> +${cost.nextLevel}</span></span>
-                  <button class="btn-sm btn-teal" ${canUpg ? "" : "disabled"} onclick="window.gameUI.onUpgradeEquipSlot('${sd.slot}')">
-                    淬煉強化 (${cost.costGold} G)
-                  </button>
-                </div>
-                <div class="inv-card-desc">${sd.bonusDesc}</div>
-                <div class="ing-row">${ingChips.join(" ")}</div>
-              </div>
-            `;
+            const head = `<div class="upg-name">${this.px.icon(sd.icon, 18)} ${sd.name}</div>
+              <div class="upg-pips">${pips(curLv)}<b>+${curLv}</b></div>
+              <div class="upg-desc">${sd.bonusDesc}</div>`;
+            if (!cost) return `<div class="upg-card maxed">${head}<div class="upg-max">已達最高 +5</div></div>`;
+            const ok = !lacks(cost.ingredients, cost.costGold);
+            return `<div class="upg-card ${ok ? "ready" : ""}">${head}
+              <div class="ing-row">${chipsOf(cost.ingredients)}</div>
+              <button class="btn-sm btn-teal upg-btn" ${ok ? "" : "disabled"} onclick="window.gameUI.onUpgradeEquipSlot('${sd.slot}')">
+                +${curLv} → +${cost.nextLevel}｜${cost.costGold} G
+              </button>
+            </div>`;
           })
           .join("")}
       </div>
     `;
 
-    const recipesHtml = this.engine.data.recipes
+    const recipesHtml = `<div class="craft-title">合成與鍛造 <small>持有金幣 ${s.gold} G</small></div><div class="recipe-grid">${this.engine.data.recipes
       .map(rc => {
         const resItem = this.engine.data.items[rc.result];
-        let canCraft = s.gold >= rc.costGold;
-        const ingTags = Object.entries(rc.ingredients).map(([ingId, req]) => {
-          const have = s.inventory[ingId] || 0;
-          if (have < req) canCraft = false;
-          const ingItem = this.engine.data.items[ingId];
-          return `<span class="ing-chip ${have >= req ? "ok" : "lack"}">${this.px.icon(ingItem.icon, 14)} ${ingItem.name} (${have}/${req})</span>`;
-        });
-
+        const ok = !lacks(rc.ingredients, rc.costGold);
         return `
-          <div class="inv-card">
+          <div class="inv-card recipe-card ${ok ? "ready" : ""}">
             <div class="inv-card-head">
-              <span>${this.px.icon(resItem.icon, 16)} <strong>${resItem.name}</strong> ${rc.count > 1 ? `x${rc.count}` : ""}</span>
-              <button class="btn-sm btn-accent" ${canCraft ? "" : "disabled"} onclick="window.gameUI.onCraftClick('${rc.id}')">
-                鍛造 (${rc.costGold} G)
-              </button>
+              <span>${this.px.icon(resItem.icon, 18)} <strong>${resItem.name}</strong> ${rc.count > 1 ? `x${rc.count}` : ""}</span>
             </div>
             ${this.renderItemStatsBadges(resItem)}
             ${this.renderEquipComparison(resItem)}
             <div class="inv-card-desc">${rc.desc}</div>
-            <div class="ing-row">${ingTags.join(" ")}</div>
+            <div class="ing-row">${chipsOf(rc.ingredients)}</div>
+            <button class="btn-sm btn-accent recipe-btn" ${ok ? "" : "disabled"} onclick="window.gameUI.onCraftClick('${rc.id}')">鍛造｜${rc.costGold} G</button>
           </div>
         `;
       })
-      .join("");
+      .join("")}</div>`;
 
     box.innerHTML = upgradeHtml + recipesHtml;
   }

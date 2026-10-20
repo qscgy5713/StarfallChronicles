@@ -1349,3 +1349,31 @@ body.in-combat .rt-top, body.in-combat .rt-log { display: block; }
 .vol-row { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 14px; color: #e2e8f0; }
 .vol-row input[type="range"] { flex: 1; accent-color: #facc15; }
 .guide-auto-btn[hidden] { display: none !important; }
+
+/* 鍛造視窗：淬煉三欄卡片 + 配方雙欄卡片 */
+#modal-craft .modal-card { max-width: 960px; width: 94vw; }
+#craft-recipes-list { display: block; }
+.craft-title { font-size: 14px; font-weight: 800; color: #38bdf8; margin: 4px 0 8px; display: flex; align-items: baseline; gap: 10px; }
+.craft-title small { font-size: 11px; font-weight: 500; color: #94a3b8; }
+.upg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+.recipe-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.upg-card, .recipe-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 10px; background: rgba(30, 41, 59, 0.6); border: 1px solid rgba(148, 163, 184, 0.25); }
+.upg-card.ready, .recipe-card.ready { border-color: rgba(45, 212, 191, 0.55); }
+.upg-card.maxed { border-color: rgba(250, 204, 21, 0.5); }
+.upg-name { font-size: 14px; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.upg-pips { display: flex; align-items: center; gap: 4px; }
+.upg-pips i { width: 16px; height: 6px; border-radius: 3px; background: rgba(148, 163, 184, 0.25); }
+.upg-pips i.on { background: #facc15; box-shadow: 0 0 6px rgba(250, 204, 21, 0.6); }
+.upg-pips b { margin-left: 6px; color: #facc15; font-size: 12px; }
+.upg-desc { font-size: 11px; color: #94a3b8; line-height: 1.5; }
+.upg-max { text-align: center; color: #facc15; font-weight: 800; font-size: 12px; padding: 6px 0; }
+.upg-btn, .recipe-btn { width: 100%; margin-top: auto; padding: 7px 0; }
+.recipe-card .ing-row, .upg-card .ing-row { margin-top: 0; }
+@media (max-width: 760px) { .upg-grid, .recipe-grid { grid-template-columns: 1fr; } }
+
+/* 商店/背包/技能/圖鑑：加寬並雙欄排列，減少捲動 */
+#modal-shop .modal-card, #modal-inventory .modal-card, #modal-skills .modal-card, #modal-codex .modal-card { max-width: 960px; width: 94vw; }
+#shop-catalog-list, #inv-bag-list, #skills-unlock-list, #codex-lore-list, #codex-bestiary-list, #codex-ach-list {
+  display: grid !important; grid-template-columns: repeat(2, 1fr); gap: 10px !important; align-items: start;
+}
+@media (max-width: 760px) { #shop-catalog-list, #inv-bag-list, #skills-unlock-list, #codex-lore-list, #codex-bestiary-list, #codex-ach-list { grid-template-columns: 1fr; } }
