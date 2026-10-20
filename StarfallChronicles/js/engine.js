@@ -3123,6 +3123,20 @@ class StarfallEngine {
     return { ok: true, element: nextElem, label };
   }
 
+  // 找出主角附近最近的魔物 (地圖上的 E/B 格)，供探索中直接出招開戰
+  findNearestEnemy(maxDist) {
+    let best = null;
+    for (const [coord, ev] of Object.entries(this.activeEvents)) {
+      if (!ev || ev.type !== "enemy") continue;
+      const [x, y] = coord.split(",").map(Number);
+      const t = this.activeMap[y] && this.activeMap[y][x];
+      if (t !== "E" && t !== "B") continue;
+      const d = Math.hypot(x - this.state.x, y - this.state.y);
+      if (d <= maxDist && (!best || d < best.dist)) best = { coord, ev, dist: d };
+    }
+    return best;
+  }
+
   // 探索中施放治療技能 (技能列常駐，平時可補血)
   castFieldHeal(skillId) {
     const sk = this.data.skills[skillId];

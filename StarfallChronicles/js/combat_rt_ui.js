@@ -268,11 +268,25 @@ const GameUIRT = {
       this.renderAll();
       return;
     }
+    // 攻擊技能：附近有魔物就直接出招開戰 (近戰最遠自動衝刺 4.2 格、魔法依射程)
+    if (sk.type !== "defense") {
+      const range = this.engine.rtSkillRange(sk);
+      const reach = range < 2 ? 4.2 : range;
+      const target = this.engine.findNearestEnemy(reach);
+      if (target) {
+        this.engine.startCombat(target.ev, target.coord);
+        this.renderAll();
+        const res = this.engine.executeSkill(skillId);
+        if (!res.ok && res.msg) this.showToast(res.msg, "warn");
+        if (!this.engine.combat) this.renderAll();
+        return;
+      }
+    }
     this._swing = { ticks: 14, max: 14, color: RT_ELEM_COLORS[sk.type === "ultimate" ? "ultimate" : sk.type] || "#e2e8f0" };
     if (window.soundSystem) window.soundSystem.sfx("slash");
     if (!this._swingToastAt || performance.now() - this._swingToastAt > 6000) {
       this._swingToastAt = performance.now();
-      this.showToast("靠近魔物即自動開戰，戰技在戰鬥中才會生效", "teal");
+      this.showToast("附近沒有魔物；靠近魔物按攻擊鍵即可出招開戰", "teal");
     }
   },
 
