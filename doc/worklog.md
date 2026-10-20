@@ -1,6 +1,18 @@
 # 《星隕編年史：霧海遺城》工作日誌 (`doc/worklog.md`)
 
 ## 2026-10-20
+- **章節專屬地形與戰鬥畫面升級 (`js/mh3d.js`)**：新增 `drawBiomeWall()`（第 2 章棕櫚樹/海岸礁石、第 3 章帶熔岩裂紋的尖岩柱、第 4 章積雪雪松/冰晶、第 5 章發光紫晶柱）。戰鬥場景改為與探索一致的天空、太陽、遠山與草地；獵人與魔物改用立體精靈（`drawCharacterSprite` / `drawMonsterSprite` 新增螢幕座標模式），魔物面向獵人，並反映斷尾（尾巴消失、顯示斷面）、破頭（裂痕）、受擊閃白與憤怒紅光；部位命中框與標籤對應新模型重新定位。修正 `drawMonsterSprite` 在螢幕座標模式下 `tx` 為物件導致 NaN 的問題。
+- **第 2～5 章改為各自日景 (`js/mh3d.js` 調色盤 `getBiome3DPalette`)**：第二章海岸晴空（蔚藍海天、青綠水域、淺灰藍石牆）；第三章熔岩荒漠黃昏（橘紅天空、赭色岩地、火山雲）；第四章雪原高空（冰藍天、白雪地、雪白牆體）；第五章紫紅暮色（紫色天空、暮光太陽、紫晶牆體）。調色盤新增 `sun` / `mountain` / `bgMid` / `bgBottom` / `detailA` / `detailB` 欄位，太陽、雲色與地表細節皆依章節變化。
+- **場景物件與魔物立體化、第一章改白天（參考《魔物獵人：世界》實機畫面）(`js/mh3d.js`)**：帳篷＋動態篝火、鍛造爐、寶箱/聖棺、發光符文石碑、封印巨門、旋轉傳送環、浮動採集物，以及帶角/背棘/尾巴/利牙/紅眼的魔物（首領與菁英有雙翼與光環）。第一章改為藍天白雲、陽光光束、淺色霧氣與鮮綠草地的日景（`pal.day`），其餘章節維持夜景。
+- **主角與 NPC 造型升級 (`js/mh3d.js`)**：新增 `drawCharacterSprite()`（面向鏡頭的漸層人物：披風、肩甲、腰帶胸徽、手臂、臉部表情、頭盔羽飾/兜帽/帽子/髮型、背負發光武器、走動擺動）與 `drawPalicoSprite()`（艾露貓）。主角改用金色羽飾頭盔＋藍色龍鎧；NPC 依座標雜湊分 4 種服飾，村長/長老為白髮披風造型。
+- **3D 畫面視覺升級 (`js/mh3d.js`)**：方塊側面改為漸層光影（下暗上亮）、依距離混合大氣霧色；地面加入雜訊明暗與草簇斑點；第一章樹木改為圓潤漸層多層樹冠；天空新增星點與天光；新增 `drawAtmosphere()`（地平線霧牆、主角暖色光暈、飄浮微粒、暗角）；獵人腳下加入落影。
+- **版面改為一屏顯示（不需往下捲動）**：`css/style.css` 將 `body` 固定為視窗高度並隱藏頁面捲動；頂部導覽列與導引橫幅壓縮；左右面板改為內部捲動；中央畫布以 container query 依剩餘空間等比縮放（3:2）。`js/ui.js` 的 `setupRetinaCanvas()` 不再寫死畫布 px 尺寸，改由 CSS 控制。
+- **修復前端 `ui.js` 變數重複宣告語法錯誤與開場引導優化**：
+  - **問題成因**：`StarfallChronicles/js/ui.js` 第 790 行重複宣告 `const obj = this.engine.getCurrentObjective()`（第 699 行已存在相同區塊宣告），導致瀏覽器解析時拋出致命語法錯誤 `SyntaxError: Identifier 'obj' has already been declared`，造成 `GameUI` 無法實例化，進入遊戲的開場引導視窗 (`#modal-intro`) 點擊無法關閉。
+  - **解決方式**：
+    1. 移除 `StarfallChronicles/js/ui.js` 第 790 行重複的 `const` 宣告，並為計時器 `startTimer()` 加入 `typeof document !== "undefined"` 防禦性判斷。
+    2. 更新 `StarfallChronicles/index.html` 開場引導視窗標題為「3D 魔物獵人狩獵冒險指南」，明確告知 3D 視角操作與快捷鍵，並將開始按鈕更新為「啟程出獵！進入 3D 狩獵世界 [按 Space 或點擊此處]」。
+    3. 於 `StarfallChronicles/tests/test_game.js` 新增第 10 大自動化測試：模擬前端 DOM/Canvas 環境自動化加載與實例化 `GameUI`，嚴格杜絕前端語法錯誤。
 - **完成第五階段：《魔物獵人》風格 3D 狩獵紀元全面升級 (`Monster Hunter 3D Edition v4.0`)**：
   1. **零外部依賴 3D 透視渲染與多部位狩獵引擎 (`StarfallChronicles/js/mh3d.js`)**：
      - 採用純 HTML5 Canvas 數學透視投影矩陣 (`projectPoint`) 與由遠至近 Z 深度排序繪製算法，100% 離線運作不依賴任何外部 3D 庫。

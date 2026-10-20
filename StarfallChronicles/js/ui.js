@@ -265,8 +265,6 @@ class GameUI {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       this.canvas.width = this.logicalWidth * dpr;
       this.canvas.height = this.logicalHeight * dpr;
-      this.canvas.style.width = `${this.logicalWidth}px`;
-      this.canvas.style.height = `${this.logicalHeight}px`;
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       this.ctx.imageSmoothingEnabled = false;
     }
@@ -323,9 +321,9 @@ class GameUI {
   }
 
   startTimer() {
-    setInterval(() => {
+    this.timerInterval = setInterval(() => {
       this.engine.state.playTimeSeconds = (this.engine.state.playTimeSeconds || 0) + 1;
-      const el = document.getElementById("hud-playtime");
+      const el = typeof document !== "undefined" && document.getElementById ? document.getElementById("hud-playtime") : null;
       if (el) el.textContent = this.formatTime(this.engine.state.playTimeSeconds);
     }, 1000);
   }
@@ -787,7 +785,6 @@ class GameUI {
     }
 
     // 若玩家主動開啟「星輝羅盤輔助」，才繪製金色像素導引路線
-    const obj = this.engine.getCurrentObjective();
     if (obj && this.engine.state.compassEnabled) {
       const guidePath = this.engine.findGuidePath(obj.x, obj.y);
       guidePath.forEach((stepInfo, i) => {

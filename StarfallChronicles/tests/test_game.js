@@ -277,7 +277,84 @@ function runTests() {
 
   console.log("[PASS] Test 9: 《魔物獵人》3D 視角投影、斬味砥石、部位破壞斷尾、太刀見切氣刃與公會貓飯驗證通過");
 
-  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 9 大自動化測試 100% 通過！ ===");
+  // Test 10: 前端 UI 模組 (ui.js) 語法完整性與 GameUI 初始化無異常驗證
+  const mockCanvasObj = () => ({
+    getContext: () => ({
+      fillRect: () => {},
+      clearRect: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      closePath: () => {},
+      stroke: () => {},
+      fill: () => {},
+      arc: () => {},
+      ellipse: () => {},
+      save: () => {},
+      restore: () => {},
+      strokeRect: () => {},
+      fillText: () => {},
+      measureText: () => ({ width: 10 }),
+      createLinearGradient: () => ({ addColorStop: () => {} }),
+      createRadialGradient: () => ({ addColorStop: () => {} }),
+      setTransform: () => {},
+      drawImage: () => {}
+    }),
+    toDataURL: () => "data:image/png;base64,",
+    width: 960,
+    height: 640,
+    style: {},
+    closest: () => ({ style: {} })
+  });
+
+  const prevDoc = global.document;
+  const prevReqAnim = global.requestAnimationFrame;
+  global.window.addEventListener = () => {};
+  global.requestAnimationFrame = () => {};
+  global.document = {
+    getElementById: () => ({
+      ...mockCanvasObj(),
+      classList: { add: () => {}, remove: () => {}, contains: () => false },
+      innerHTML: "",
+      textContent: "",
+      style: {},
+      appendChild: () => {},
+      addEventListener: () => {},
+      setAttribute: () => {},
+      closest: () => ({ style: {} }),
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 960, height: 640 })
+    }),
+    createElement: () => ({
+      ...mockCanvasObj(),
+      classList: { add: () => {}, remove: () => {}, contains: () => false },
+      innerHTML: "",
+      textContent: "",
+      style: {},
+      appendChild: () => {},
+      addEventListener: () => {},
+      setAttribute: () => {},
+      closest: () => ({ style: {} })
+    }),
+    querySelectorAll: () => [],
+    querySelector: () => null,
+    addEventListener: () => {}
+  };
+  global.localStorage = {
+    getItem: () => null,
+    setItem: () => {}
+  };
+
+  require("../js/ui.js");
+  const testUI = new global.window.GameUI(mhGame);
+  assert.ok(testUI, "GameUI 應成功初始化且無任何語法錯誤");
+  testUI.renderAll();
+  assert.ok(true, "testUI.renderAll() 應順暢執行無異常");
+  if (testUI.timerInterval) clearInterval(testUI.timerInterval);
+  global.document = prevDoc;
+  global.requestAnimationFrame = prevReqAnim;
+  console.log("[PASS] Test 10: 前端 UI 模組語法完整性、事件綁定與 GameUI 初始化渲染驗證通過");
+
+  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 10 大自動化測試 100% 通過！ ===");
 }
 
 runTests();

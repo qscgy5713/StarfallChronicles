@@ -148,6 +148,40 @@ class MH3DRenderer {
     };
   }
 
+  // ---- 光影與大氣霧輔助 ----
+  parseColor(col) {
+    if (typeof col !== "string") return null;
+    if (col[0] === "#") {
+      let h = col.slice(1);
+      if (h.length === 3) h = h.split("").map(c => c + c).join("");
+      if (h.length < 6) return null;
+      return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+    }
+    const m = col.match(/rgba?\(([^)]+)\)/);
+    if (m) {
+      const a = m[1].split(",").map(v => parseFloat(v));
+      return [a[0], a[1], a[2]];
+    }
+    return null;
+  }
+
+  // 亮度縮放 (light) 後再與霧色混合 (fog 0~1)
+  shade(col, light = 1, fog = 0) {
+    const c = this.parseColor(col);
+    if (!c) return col;
+    const f = this.fogRGB || [10, 16, 28];
+    const out = c.map((v, i) => {
+      const lit = Math.min(255, v * light);
+      return Math.round(lit + (f[i] - lit) * fog);
+    });
+    return `rgb(${out[0]},${out[1]},${out[2]})`;
+  }
+
+  fogAt(depth) {
+    const r = (this.fogRadius || 12);
+    return Math.max(0, Math.min(0.82, (depth - r * 0.28) / (r * 0.95)));
+  }
+
   drawQuad3D(ctx, pts, fillCol, strokeCol = null, lineWidth = 1) {
     if (pts.some(p => !p)) return;
     ctx.beginPath();
@@ -197,23 +231,38 @@ class MH3DRenderer {
       return db - da;
     });
 
+    const centerDepth = (p000 || p111) ? ((p000 ? p000.depth : p111.depth) + (p111 ? p111.depth : p000.depth)) / 2 : 0;
+    const fog = this.fogAt(centerDepth);
+    const edge = palette.stroke || "rgba(0, 0, 0, 0.28)";
+
     faces.forEach(f => {
-      this.drawQuad3D(ctx, f.pts, f.col, palette.stroke || "rgba(15, 23, 42, 0.45)", 0.9);
+      if (f.pts.some(pt => !pt)) return;
+      // 側面由下往上漸亮，模擬環境光遮蔽
+      const yTop = Math.min(...f.pts.map(pt => pt.sy));
+      const yBot = Math.max(...f.pts.map(pt => pt.sy));
+      const g = ctx.createLinearGradient(0, yTop, 0, yBot);
+      g.addColorStop(0, this.shade(f.col, 1.18, fog));
+      g.addColorStop(1, this.shade(f.col, 0.62, fog));
+      this.drawQuad3D(ctx, f.pts, g, edge, 0.7);
     });
 
-    if (palette.top) {
-      this.drawQuad3D(ctx, [p010, p110, p111, p011], palette.top, palette.stroke || "rgba(15, 23, 42, 0.5)", 0.9);
+    if (palette.top && p010 && p110 && p111 && p011) {
+      this.drawQuad3D(ctx, [p010, p110, p111, p011], this.shade(palette.top, 1.12, fog), "rgba(255,255,255,0.10)", 0.8);
     }
   }
 
   getBiome3DPalette(chNum) {
     const palettes = {
       1: {
-        skyTop: "#071712",
-        skyHorizon: "#133b2b",
-        groundA: "#163024",
-        groundB: "#1c3b2c",
-        groundStroke: "rgba(45, 212, 191, 0.16)",
+        day: true,
+        skyTop: "#3f8fe0",
+        skyHorizon: "#bfe3f2",
+        bgMid: "#4d8a3c",
+        bgBottom: "#2f5f2a",
+        mountain: "rgba(88, 128, 150, 0.6)",
+        groundA: "#5a9a3e",
+        groundB: "#5d9d41",
+        groundStroke: "rgba(20, 60, 20, 0.10)",
         wallTop: "#1f5138",
         wallFront: "#143325",
         wallSide: "#0f261c",
@@ -224,62 +273,90 @@ class MH3DRenderer {
         accent: "#4ade80"
       },
       2: {
-        skyTop: "#040d1f",
-        skyHorizon: "#0f2e59",
-        groundA: "#11243d",
-        groundB: "#162d4c",
-        groundStroke: "rgba(56, 189, 248, 0.18)",
-        wallTop: "#334155",
-        wallFront: "#1e293b",
-        wallSide: "#152033",
-        wallSideDark: "#0c1322",
-        liquid: "#0369a1",
-        liquidGlow: "#2dd4bf",
-        bridge: "#92400e",
+        day: true,
+        skyTop: "#2f86d6",
+        skyHorizon: "#c9ecf5",
+        bgMid: "#3f8f95",
+        bgBottom: "#215a66",
+        mountain: "rgba(96, 140, 170, 0.55)",
+        sun: "255, 250, 230",
+        detailA: "#7dd3fc",
+        detailB: "#fef9c3",
+        groundA: "#8aa7a0",
+        groundB: "#94b2aa",
+        groundStroke: "rgba(20, 60, 70, 0.12)",
+        wallTop: "#cbd5e1",
+        wallFront: "#7f93a8",
+        wallSide: "#64788f",
+        wallSideDark: "#4b5d73",
+        liquid: "#0ea5c6",
+        liquidGlow: "#a5f3fc",
+        bridge: "#a16207",
         accent: "#38bdf8"
       },
       3: {
-        skyTop: "#180604",
-        skyHorizon: "#45140b",
-        groundA: "#29120e",
-        groundB: "#361812",
-        groundStroke: "rgba(251, 146, 60, 0.2)",
-        wallTop: "#44403c",
-        wallFront: "#292524",
-        wallSide: "#1c1917",
-        wallSideDark: "#141210",
-        liquid: "#c2410c",
-        liquidGlow: "#facc15",
+        day: true,
+        skyTop: "#d9531e",
+        skyHorizon: "#fcd9a0",
+        bgMid: "#a4552a",
+        bgBottom: "#5e2a14",
+        mountain: "rgba(130, 60, 40, 0.6)",
+        sun: "255, 236, 190",
+        detailA: "#fb923c",
+        detailB: "#fde68a",
+        groundA: "#a8633a",
+        groundB: "#b3703f",
+        groundStroke: "rgba(70, 30, 10, 0.14)",
+        wallTop: "#8a5a40",
+        wallFront: "#6b3f2a",
+        wallSide: "#522f1f",
+        wallSideDark: "#3b2015",
+        liquid: "#ea580c",
+        liquidGlow: "#fde047",
         bridge: "#57534e",
         accent: "#fb923c"
       },
       4: {
-        skyTop: "#08061a",
-        skyHorizon: "#251c5c",
-        groundA: "#18143b",
-        groundB: "#201b4d",
-        groundStroke: "rgba(167, 139, 250, 0.22)",
-        wallTop: "#cbd5e1",
-        wallFront: "#64748b",
-        wallSide: "#475569",
-        wallSideDark: "#334155",
-        liquid: "#312e81",
-        liquidGlow: "#c084fc",
-        bridge: "#ca8a04",
-        accent: "#a78bfa"
+        day: true,
+        skyTop: "#6fb1ee",
+        skyHorizon: "#eef6fc",
+        bgMid: "#9db9d3",
+        bgBottom: "#6f8fb0",
+        mountain: "rgba(190, 210, 232, 0.75)",
+        sun: "255, 255, 245",
+        detailA: "#ffffff",
+        detailB: "#bae6fd",
+        groundA: "#e6eff7",
+        groundB: "#d6e4f0",
+        groundStroke: "rgba(80, 110, 150, 0.14)",
+        wallTop: "#ffffff",
+        wallFront: "#9fb6cf",
+        wallSide: "#7c97b5",
+        wallSideDark: "#5f7b9b",
+        liquid: "#60a5fa",
+        liquidGlow: "#e0f2fe",
+        bridge: "#a16207",
+        accent: "#7dd3fc"
       },
       5: {
-        skyTop: "#140511",
-        skyHorizon: "#420f33",
-        groundA: "#240d20",
-        groundB: "#2e1129",
-        groundStroke: "rgba(244, 63, 94, 0.22)",
-        wallTop: "#4c1d95",
-        wallFront: "#2e1065",
-        wallSide: "#1e0942",
-        wallSideDark: "#13052b",
-        liquid: "#881337",
-        liquidGlow: "#f43f5e",
+        day: true,
+        skyTop: "#5b2a86",
+        skyHorizon: "#ffb784",
+        bgMid: "#7a3b55",
+        bgBottom: "#35162f",
+        mountain: "rgba(70, 30, 70, 0.65)",
+        sun: "255, 190, 120",
+        detailA: "#f472b6",
+        detailB: "#fcd34d",
+        groundA: "#5b3a4d",
+        groundB: "#664358",
+        groundStroke: "rgba(20, 5, 20, 0.2)",
+        wallTop: "#7c3aed",
+        wallFront: "#4c1d95",
+        wallSide: "#3b0f73",
+        wallSideDark: "#240a45",
+        liquid: "#be123c",
+        liquidGlow: "#fb7185",
         bridge: "#a16207",
         accent: "#f43f5e"
       }
@@ -301,6 +378,8 @@ class MH3DRenderer {
     const cam = this.getCameraConfig();
     const chNum = s.chapter || 1;
     const pal = this.getBiome3DPalette(chNum);
+    this.fogRGB = this.parseColor(pal.skyHorizon) || [10, 16, 28];
+    this.fogRadius = cam.cullRadius;
     const expMap = this.engine.getCurrentExploredMap();
     const comp = this.engine.getComputedStats();
     const obj = this.engine.getCurrentObjective();
@@ -315,14 +394,42 @@ class MH3DRenderer {
 
     const groundBgGrad = ctx.createLinearGradient(0, horizonY, 0, h);
     groundBgGrad.addColorStop(0, pal.skyHorizon);
-    groundBgGrad.addColorStop(0.25, "#090e18");
-    groundBgGrad.addColorStop(1, "#04070d");
+    groundBgGrad.addColorStop(0.25, pal.bgMid || "#090e18");
+    groundBgGrad.addColorStop(1, pal.bgBottom || "#04070d");
     ctx.fillStyle = groundBgGrad;
     ctx.fillRect(0, horizonY, w, h - horizonY);
 
+    // 星點與天光
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    for (let i = 0; i < (pal.day ? 0 : 60); i++) {
+      const sx = ((i * 97.13 + this.camYaw * 60) % w + w) % w;
+      const sy = (i * 53.7) % (horizonY * 0.9);
+      ctx.globalAlpha = 0.25 + 0.5 * ((Math.sin(animFrame * 0.03 + i) + 1) / 2);
+      ctx.fillRect(sx, sy, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1);
+    }
+    ctx.globalAlpha = 1;
+    const sunX = (((w * 0.72 - this.camYaw * 120) % w) + w) % w;
+    const sunG = ctx.createRadialGradient(sunX, horizonY, 4, sunX, horizonY, w * 0.32);
+    sunG.addColorStop(0, pal.day ? `rgba(${pal.sun || "255, 252, 225"}, 0.95)` : "rgba(255, 236, 170, 0.55)");
+    sunG.addColorStop(0.4, pal.day ? `rgba(${pal.sun || "255, 240, 190"}, 0.28)` : "rgba(255, 190, 110, 0.14)");
+    sunG.addColorStop(1, "rgba(255, 190, 110, 0)");
+    ctx.fillStyle = sunG;
+    ctx.fillRect(0, 0, w, horizonY + 60);
+
+    if (pal.day) {
+      ctx.fillStyle = chNum === 3 ? "rgba(90,40,30,0.45)" : chNum === 5 ? "rgba(255,170,150,0.5)" : "rgba(255,255,255,0.75)";
+      for (let i = 0; i < 6; i++) {
+        const cx = (((i * 263 + this.camYaw * 90 + animFrame * 0.12) % (w + 240)) + w + 240) % (w + 240) - 120;
+        const cy = 24 + (i * 37) % Math.max(40, horizonY - 50);
+        [[0, 0, 46, 14], [-34, 5, 32, 11], [36, 6, 36, 12], [8, -9, 30, 12]].forEach(([ox, oy, rx, ry]) => {
+          ctx.beginPath(); ctx.ellipse(cx + ox, cy + oy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+        });
+      }
+    }
+
     // 遠景 3D 狩獵山脈與古龍骨シルエット (隨 camYaw 水平視差捲動)
     const yawShift = ((this.camYaw / (Math.PI * 2)) * w * 1.5) % w;
-    ctx.fillStyle = "rgba(8, 13, 24, 0.72)";
+    ctx.fillStyle = pal.mountain || "rgba(8, 13, 24, 0.72)";
     ctx.beginPath();
     ctx.moveTo(0, horizonY + 22);
     for (let sx = 0; sx <= w + 60; sx += 48) {
@@ -430,6 +537,9 @@ class MH3DRenderer {
       pa.ticks--;
     }
 
+    // 5.5 後製：地平線霧氣、主角光暈、飄浮微粒、暗角
+    this.drawAtmosphere(ctx, w, h, animFrame, pal, cam);
+
     // 6. 繪製 3D 物件頭頂獵人公會名牌與浮動跳字
     this.draw3DWorldLabelsAndFloats(ctx, cam, w, h, expMap, obj, animFrame);
 
@@ -441,6 +551,150 @@ class MH3DRenderer {
       this.drawQuestClearOverlay(ctx, w, h);
       this.questClearStampTicks--;
     }
+  }
+
+  drawAtmosphere(ctx, w, h, animFrame, pal, cam) {
+    ctx.save();
+    // 遠方霧牆
+    const horizonY = Math.round(h * 0.34);
+    const fogCol = this.parseColor(pal.skyHorizon) || [10, 16, 28];
+    const fg = ctx.createLinearGradient(0, horizonY - 20, 0, horizonY + h * 0.22);
+    fg.addColorStop(0, `rgba(${fogCol.join(",")},0.0)`);
+    fg.addColorStop(0.35, `rgba(${fogCol.join(",")},${pal.day ? 0.55 : 0.42})`);
+    fg.addColorStop(1, `rgba(${fogCol.join(",")},0.0)`);
+    ctx.fillStyle = fg;
+    ctx.fillRect(0, horizonY - 20, w, h * 0.22 + 20);
+
+    // 主角周圍暖色光暈
+    const hp = this.projectPoint(this.camX, 0.6, this.camZ, cam, w, h);
+    if (hp) {
+      const rad = Math.max(90, w * 0.22);
+      const lg = ctx.createRadialGradient(hp.sx, hp.sy, 4, hp.sx, hp.sy, rad);
+      lg.addColorStop(0, pal.day ? "rgba(255, 240, 190, 0.10)" : "rgba(255, 226, 150, 0.20)");
+      lg.addColorStop(1, "rgba(255, 226, 150, 0)");
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = lg;
+      ctx.fillRect(hp.sx - rad, hp.sy - rad, rad * 2, rad * 2);
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // 飄浮微粒 (螢火 / 塵 / 餘燼)
+    ctx.fillStyle = pal.accent;
+    for (let i = 0; i < 26; i++) {
+      const t = animFrame * 0.004 + i * 12.9898;
+      const px = ((Math.sin(t * 1.7 + i) * 0.5 + 0.5) * w + animFrame * 0.15 * (1 + (i % 3))) % w;
+      const py = (Math.cos(t * 1.3 + i * 2.1) * 0.5 + 0.5) * h * 0.85 + h * 0.1;
+      ctx.globalAlpha = 0.18 + 0.32 * (Math.sin(animFrame * 0.05 + i) * 0.5 + 0.5);
+      ctx.fillRect(px, py, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // 白天：斜射陽光光束
+    if (pal.day) {
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < 5; i++) {
+        const x0 = w * (0.45 + i * 0.12) + Math.sin(animFrame * 0.01 + i) * 12;
+        const g2 = ctx.createLinearGradient(x0, 0, x0 - w * 0.25, h * 0.8);
+        g2.addColorStop(0, "rgba(255,244,200,0.10)");
+        g2.addColorStop(1, "rgba(255,244,200,0)");
+        ctx.fillStyle = g2;
+        ctx.beginPath();
+        ctx.moveTo(x0, 0); ctx.lineTo(x0 + w * 0.05, 0);
+        ctx.lineTo(x0 - w * 0.2, h * 0.8); ctx.lineTo(x0 - w * 0.3, h * 0.8);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // 暗角
+    const vg = ctx.createRadialGradient(w / 2, h / 2, h * 0.38, w / 2, h / 2, h * 0.95);
+    vg.addColorStop(0, "rgba(0,0,0,0)");
+    vg.addColorStop(1, pal.day ? "rgba(10,30,10,0.28)" : "rgba(0,0,0,0.55)");
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  }
+
+  // 第 2~5 章專屬地形：礁石棕櫚 / 熔岩尖岩 / 雪松冰晶 / 紫晶柱
+  drawBiomeWall(ctx, cam, w, h, tx, ty, chNum, af) {
+    const hs = ((tx * 7 + ty * 13) % 5);
+    const tall = 1 + hs * 0.12;
+    this.withSprite(ctx, cam, w, h, tx, ty, (u, fog) => {
+      if (chNum === 2) {
+        if (hs % 2 === 0) {
+          // 棕櫚樹
+          const sway = Math.sin(af * 0.04 + tx) * u * 0.05;
+          ctx.strokeStyle = this.shade("#92400e", 1, fog); ctx.lineWidth = u * 0.13; ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(u * 0.12, -u * 0.6, u * 0.05 + sway, -u * 1.25 * tall); ctx.stroke();
+          const cx = u * 0.05 + sway, cy = -u * 1.25 * tall;
+          for (let i = 0; i < 7; i++) {
+            const a = -Math.PI + (i / 6) * Math.PI;
+            ctx.fillStyle = this.shade(i % 2 ? "#16a34a" : "#4ade80", 1, fog);
+            ctx.beginPath(); ctx.moveTo(cx, cy);
+            ctx.quadraticCurveTo(cx + Math.cos(a) * u * 0.4, cy + Math.sin(a) * u * 0.5 - u * 0.15, cx + Math.cos(a) * u * 0.78, cy + Math.sin(a) * u * 0.2 + u * 0.3);
+            ctx.quadraticCurveTo(cx + Math.cos(a) * u * 0.4, cy + Math.sin(a) * u * 0.3, cx, cy); ctx.fill();
+          }
+          ctx.fillStyle = this.shade("#78350f", 1, fog);
+          ctx.beginPath(); ctx.arc(cx - u * 0.05, cy + u * 0.06, u * 0.05, 0, 7); ctx.arc(cx + u * 0.06, cy + u * 0.08, u * 0.05, 0, 7); ctx.fill();
+        } else {
+          // 海岸礁石群
+          [[-0.25, 0.5, 0.3], [0.2, 0.62, 0.34], [0, 0.85 * tall, 0.3]].forEach(([ox, hh, rr], i) => {
+            const g = ctx.createLinearGradient(0, -u * hh, 0, 0);
+            g.addColorStop(0, this.shade("#e2e8f0", 1, fog)); g.addColorStop(1, this.shade("#64748b", 1, fog));
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.moveTo(u * (ox - rr), 0); ctx.quadraticCurveTo(u * (ox - rr * 0.8), -u * hh, u * ox, -u * hh); ctx.quadraticCurveTo(u * (ox + rr * 0.9), -u * hh * 0.8, u * (ox + rr), 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+          });
+          ctx.fillStyle = this.shade("#bbf7d0", 1, fog);
+          ctx.fillRect(-u * 0.3, -u * 0.04, u * 0.6, u * 0.04);
+        }
+      } else if (chNum === 3) {
+        // 熔岩尖岩
+        const hh = u * 1.25 * tall;
+        const g = ctx.createLinearGradient(-u * 0.4, 0, u * 0.4, 0);
+        g.addColorStop(0, this.shade("#a8714a", 1.1, fog)); g.addColorStop(0.55, this.shade("#6b3f2a", 1, fog)); g.addColorStop(1, this.shade("#2f1a10", 1, fog));
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(-u * 0.42, 0); ctx.lineTo(-u * 0.3, -hh * 0.55); ctx.lineTo(-u * 0.1, -hh * 0.78); ctx.lineTo(u * 0.02, -hh);
+        ctx.lineTo(u * 0.16, -hh * 0.7); ctx.lineTo(u * 0.34, -hh * 0.38); ctx.lineTo(u * 0.44, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = `rgba(251,146,60,${0.55 + Math.sin(af * 0.1 + tx) * 0.25})`; ctx.lineWidth = Math.max(1.5, u * 0.035);
+        ctx.beginPath(); ctx.moveTo(-u * 0.05, -hh * 0.2); ctx.lineTo(u * 0.04, -hh * 0.45); ctx.lineTo(-u * 0.04, -hh * 0.65); ctx.stroke();
+        this.glow(ctx, 0, -hh * 0.4, u * 0.7, "rgba(255,120,40,A)", 0.16);
+      } else if (chNum === 4) {
+        if (hs % 2 === 0) {
+          // 雪松
+          const hh = u * 1.35 * tall;
+          ctx.fillStyle = this.shade("#78350f", 1, fog); ctx.fillRect(-u * 0.05, -u * 0.2, u * 0.1, u * 0.2);
+          for (let i = 0; i < 4; i++) {
+            const y1 = -u * 0.15 - (hh - u * 0.15) * (i / 4), wd = u * (0.46 - i * 0.09), y0 = y1 - (hh / 3.2);
+            ctx.fillStyle = this.vGrad(ctx, y0, y1, "#2f6f4f", "#14532d", fog);
+            ctx.beginPath(); ctx.moveTo(-wd, y1); ctx.lineTo(0, y0); ctx.lineTo(wd, y1); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = this.shade("#ffffff", 1, fog);
+            ctx.beginPath(); ctx.moveTo(-wd * 0.7, y1 - (y1 - y0) * 0.35); ctx.lineTo(0, y0); ctx.lineTo(wd * 0.7, y1 - (y1 - y0) * 0.35); ctx.quadraticCurveTo(0, y1 - (y1 - y0) * 0.1, -wd * 0.7, y1 - (y1 - y0) * 0.35); ctx.fill();
+          }
+        } else {
+          // 冰晶
+          [[-0.18, 0.7, 0.16], [0.16, 0.95 * tall, 0.18], [0, 0.55, 0.14]].forEach(([ox, hh, rr]) => {
+            const g = ctx.createLinearGradient(0, -u * hh, 0, 0);
+            g.addColorStop(0, this.shade("#f0f9ff", 1, fog)); g.addColorStop(1, this.shade("#38bdf8", 1, fog));
+            ctx.fillStyle = g; ctx.globalAlpha = 0.92;
+            ctx.beginPath(); ctx.moveTo(u * (ox - rr), 0); ctx.lineTo(u * (ox - rr * 0.7), -u * hh * 0.75); ctx.lineTo(u * ox, -u * hh); ctx.lineTo(u * (ox + rr * 0.7), -u * hh * 0.75); ctx.lineTo(u * (ox + rr), 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.globalAlpha = 1;
+          });
+        }
+      } else {
+        // 紫晶結晶柱
+        [[-0.26, 0.65, 0.12, 0.25], [0.24, 0.8, 0.13, -0.2], [0, 1.1 * tall, 0.17, 0], [0.04, 0.5, 0.1, 0.4]].forEach(([ox, hh, rr, rot], i) => {
+          ctx.save(); ctx.translate(u * ox, 0); ctx.rotate(rot * 0.5);
+          const g = ctx.createLinearGradient(-u * rr, 0, u * rr, 0);
+          g.addColorStop(0, this.shade("#e9d5ff", 1, fog)); g.addColorStop(0.5, this.shade("#a855f7", 1, fog)); g.addColorStop(1, this.shade("#4c1d95", 1, fog));
+          ctx.fillStyle = g;
+          ctx.beginPath(); ctx.moveTo(-u * rr, 0); ctx.lineTo(-u * rr, -u * hh * 0.8); ctx.lineTo(0, -u * hh); ctx.lineTo(u * rr, -u * hh * 0.8); ctx.lineTo(u * rr, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.strokeStyle = "rgba(255,255,255,0.45)"; ctx.beginPath(); ctx.moveTo(0, -u * hh); ctx.lineTo(0, 0); ctx.stroke();
+          ctx.strokeStyle = "rgba(8,12,20,0.85)";
+          ctx.restore();
+        });
+        this.glow(ctx, 0, -u * 0.55, u * 0.9, "rgba(192,132,252,A)", 0.22 + Math.sin(af * 0.07 + tx) * 0.07);
+      }
+    });
   }
 
   draw3DTile(ctx, cam, w, h, tx, ty, tile, chNum, pal, visible, animFrame) {
@@ -477,15 +731,29 @@ class MH3DRenderer {
     }
 
     // 繪製地面石板
-    let floorCol = checker ? pal.groundA : pal.groundB;
-    if (!visible) floorCol = "#0a0f1a";
+    const noise = (((tx * 73856093) ^ (ty * 19349663)) >>> 0) % 100 / 100;
+    const floorBase = checker ? pal.groundA : pal.groundB;
+    const tileFog = this.fogAt((p00.depth + p11.depth) / 2);
+    let floorCol = visible ? this.shade(floorBase, 0.82 + noise * 0.4, tileFog) : (pal.day ? (pal.bgBottom || "#3c6a30") : "#0a0f1a");
     this.drawQuad3D(
       ctx,
       [p00, p10, p11, p01],
       floorCol,
-      isHover ? "#facc15" : pal.groundStroke,
-      isHover ? 2.5 : 0.8
+      isHover ? "#facc15" : (visible ? "rgba(0,0,0,0.12)" : pal.groundStroke),
+      isHover ? 2.5 : 0.6
     );
+    // 地表細節：草簇 / 碎石斑點
+    if (visible && tile !== "#" && tile !== "W" && noise > 0.35) {
+      const cx = (p00.sx + p11.sx) / 2;
+      const cy = (p00.sy + p11.sy) / 2;
+      const sc = Math.max(1, (p10.sx - p00.sx) * 0.07);
+      ctx.fillStyle = pal.day ? this.shade(noise > 0.7 ? (pal.detailB || "#fde047") : (pal.detailA || "#86efac"), 0.9, Math.min(0.9, tileFog + 0.1)) : this.shade(pal.accent, 0.5 + noise * 0.5, Math.min(0.9, tileFog + 0.35));
+      for (let k = 0; k < 3; k++) {
+        const ox = (((tx * 31 + ty * 17 + k * 11) % 9) - 4) * sc * 2.2;
+        const oy = (((tx * 13 + ty * 29 + k * 7) % 5) - 2) * sc * 0.9;
+        ctx.fillRect(cx + ox, cy + oy, sc * 1.4, sc * 0.9);
+      }
+    }
 
     // 3D 立體牆體 / 巨木 / 黑曜石柱 (# 或隱藏裂隙牆 W)
     if (tile === "#" || tile === "W") {
@@ -504,12 +772,29 @@ class MH3DRenderer {
           side: "#3b2820",
           sideDark: "#2b1d17"
         });
-        this.drawBox3D(ctx, cam, w, h, tx, 0.85, ty, 0.88, 0.55, 0.88, {
-          top: "#22c55e",
-          front: "#15803d",
-          side: "#166534",
-          sideDark: "#14532d"
-        });
+        // 圓潤多層樹冠 (漸層球體疊加)
+        const base = this.projectPoint(tx, 0.95, ty, cam, w, h);
+        const edgeP = this.projectPoint(tx + 0.5, 0.95, ty, cam, w, h);
+        if (base && edgeP) {
+          const R = Math.max(6, Math.abs(edgeP.sx - base.sx) * 1.15);
+          const fog = this.fogAt(base.depth);
+          const blobs = [[-0.45, 0.15, 0.8], [0.45, 0.2, 0.75], [0, -0.35, 0.95], [0, 0.35, 0.7]];
+          blobs.forEach(([ox, oy, k], i) => {
+            const bx = base.sx + ox * R;
+            const by = base.sy + oy * R * 0.8 - R * 0.35;
+            const rr = R * k;
+            const g = ctx.createRadialGradient(bx - rr * 0.3, by - rr * 0.35, rr * 0.1, bx, by, rr);
+            g.addColorStop(0, this.shade("#4ade80", 0.95 - i * 0.05, fog));
+            g.addColorStop(0.55, this.shade("#15803d", 1, fog));
+            g.addColorStop(1, this.shade("#052e16", 1, fog));
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(bx, by, rr, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+      } else if (tile === "#" && chNum >= 2 && visible) {
+        this.drawBiomeWall(ctx, cam, w, h, tx, ty, chNum, animFrame);
       } else {
         this.drawBox3D(ctx, cam, w, h, tx, 0, ty, 0.96, wallH, 0.96, {
           top: tile === "W" ? "#1e3a5f" : pal.wallTop,
@@ -522,173 +807,505 @@ class MH3DRenderer {
     }
   }
 
+  // ==================== 場景物件與魔物立體精靈 ====================
+  withSprite(ctx, cam, w, h, x, z, fn, flip = false) {
+    const p = typeof x === "object" ? { sx: x.sx, sy: x.sy, scale: x.u, depth: 0 } : this.projectPoint(x, 0, z, cam, w, h);
+    if (!p) return;
+    const u = p.scale;
+    const fog = this.fogAt(p.depth) * 0.6;
+    ctx.save();
+    ctx.translate(p.sx, p.sy);
+    if (flip) ctx.scale(-1, 1);
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(1, u * 0.025);
+    ctx.strokeStyle = "rgba(8,12,20,0.85)";
+    // 地面落影
+    ctx.fillStyle = "rgba(0,0,0,0.38)";
+    ctx.beginPath(); ctx.ellipse(0, 0, u * 0.42, u * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+    fn(u, fog);
+    ctx.restore();
+  }
+
+  glow(ctx, x, y, r, col, a) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, col.replace("A", a));
+    g.addColorStop(1, col.replace("A", 0));
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    ctx.restore();
+  }
+
+  drawTentAndCampfire(ctx, cam, w, h, tx, ty, af) {
+    this.withSprite(ctx, cam, w, h, tx - 0.15, ty - 0.1, (u, fog) => {
+      // 帳篷
+      ctx.fillStyle = this.vGrad(ctx, -u * 0.8, 0, "#d97706", "#78350f", fog);
+      ctx.beginPath(); ctx.moveTo(0, -u * 0.8); ctx.lineTo(u * 0.5, 0); ctx.lineTo(-u * 0.5, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = this.shade("#451a03", 1, fog);
+      ctx.beginPath(); ctx.moveTo(0, -u * 0.42); ctx.lineTo(u * 0.14, 0); ctx.lineTo(-u * 0.14, 0); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = this.shade("#fde68a", 1, fog);
+      ctx.beginPath(); ctx.moveTo(0, -u * 0.8); ctx.lineTo(0, -u * 0.95); ctx.stroke();
+      ctx.fillStyle = "#ef4444"; ctx.fillRect(0, -u * 0.95, u * 0.2, u * 0.1);
+    });
+    this.withSprite(ctx, cam, w, h, tx + 0.22, ty + 0.2, (u, fog) => {
+      // 柴堆
+      ctx.fillStyle = this.shade("#78350f", 1, fog);
+      ctx.save(); ctx.rotate(0.35); ctx.fillRect(-u * 0.2, -u * 0.06, u * 0.4, u * 0.07); ctx.restore();
+      ctx.save(); ctx.rotate(-0.35); ctx.fillRect(-u * 0.2, -u * 0.06, u * 0.4, u * 0.07); ctx.restore();
+      // 火焰
+      const fl = Math.sin(af * 0.3) * 0.1;
+      [["#ef4444", 0.34], ["#f97316", 0.26], ["#fde047", 0.16]].forEach(([c, k], i) => {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.moveTo(-u * 0.13 * (1 - i * 0.2), -u * 0.04);
+        ctx.quadraticCurveTo(-u * 0.1, -u * k * 0.7, u * fl * 0.5, -u * (k + fl));
+        ctx.quadraticCurveTo(u * 0.12, -u * k * 0.6, u * 0.13 * (1 - i * 0.2), -u * 0.04);
+        ctx.fill();
+      });
+      this.glow(ctx, 0, -u * 0.2, u * 1.3, "rgba(255,160,60,A)", 0.32 + fl);
+    });
+  }
+
+  drawForgeSprite(ctx, cam, w, h, tx, ty, af) {
+    this.withSprite(ctx, cam, w, h, tx, ty, (u, fog) => {
+      ctx.fillStyle = this.vGrad(ctx, -u * 0.5, 0, "#64748b", "#1e293b", fog);
+      this.rrect(ctx, -u * 0.38, -u * 0.5, u * 0.76, u * 0.5, u * 0.05); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#0f172a"; this.rrect(ctx, -u * 0.22, -u * 0.34, u * 0.44, u * 0.22, u * 0.04); ctx.fill();
+      const pulse = 0.6 + Math.sin(af * 0.12) * 0.25;
+      ctx.fillStyle = `rgba(251,146,60,${pulse})`; this.rrect(ctx, -u * 0.18, -u * 0.3, u * 0.36, u * 0.14, u * 0.03); ctx.fill();
+      // 鐵砧
+      ctx.fillStyle = this.vGrad(ctx, -u * 0.72, -u * 0.5, "#cbd5e1", "#475569", fog);
+      ctx.beginPath(); ctx.moveTo(-u * 0.3, -u * 0.72); ctx.lineTo(u * 0.3, -u * 0.72); ctx.lineTo(u * 0.18, -u * 0.58); ctx.lineTo(u * 0.1, -u * 0.5); ctx.lineTo(-u * 0.1, -u * 0.5); ctx.lineTo(-u * 0.18, -u * 0.58); ctx.closePath(); ctx.fill(); ctx.stroke();
+      this.glow(ctx, 0, -u * 0.25, u * 0.9, "rgba(251,146,60,A)", 0.3 * pulse);
+    });
+  }
+
+  drawChestSprite(ctx, cam, w, h, tx, ty, relic, af) {
+    this.withSprite(ctx, cam, w, h, tx, ty, (u, fog) => {
+      const base = relic ? "#facc15" : "#b45309";
+      const dark = relic ? "#854d0e" : "#451a03";
+      const wd = relic ? 0.64 : 0.5;
+      ctx.fillStyle = this.vGrad(ctx, -u * 0.4, 0, base, dark, fog);
+      this.rrect(ctx, -u * wd / 2, -u * 0.26, u * wd, u * 0.26, u * 0.04); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-u * wd / 2, -u * 0.26);
+      ctx.quadraticCurveTo(0, -u * 0.5, u * wd / 2, -u * 0.26); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = this.shade("#fde68a", 1, fog);
+      ctx.fillRect(-u * wd / 2, -u * 0.2, u * wd, u * 0.04);
+      ctx.fillRect(-u * 0.04, -u * 0.3, u * 0.08, u * 0.14);
+      if (relic) this.glow(ctx, 0, -u * 0.3, u * 1.0, "rgba(250,204,21,A)", 0.25 + Math.sin(af * 0.1) * 0.1);
+    });
+  }
+
+  drawSteleSprite(ctx, cam, w, h, tx, ty, af) {
+    const lit = 0.5 + Math.sin(af * 0.08 + tx) * 0.2;
+    this.withSprite(ctx, cam, w, h, tx, ty, (u, fog) => {
+      ctx.fillStyle = this.vGrad(ctx, -u * 1.0, 0, "#94a3b8", "#334155", fog);
+      ctx.beginPath(); ctx.moveTo(-u * 0.24, 0); ctx.lineTo(-u * 0.2, -u * 0.85); ctx.lineTo(0, -u * 1.0); ctx.lineTo(u * 0.2, -u * 0.85); ctx.lineTo(u * 0.24, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = `rgba(56,189,248,${lit + 0.3})`; ctx.lineWidth = Math.max(1.5, u * 0.035);
+      ctx.beginPath();
+      ctx.moveTo(0, -u * 0.8); ctx.lineTo(0, -u * 0.3);
+      ctx.moveTo(-u * 0.1, -u * 0.62); ctx.lineTo(u * 0.1, -u * 0.62);
+      ctx.moveTo(-u * 0.1, -u * 0.42); ctx.lineTo(u * 0.1, -u * 0.5);
+      ctx.stroke();
+      this.glow(ctx, 0, -u * 0.55, u * 0.9, "rgba(56,189,248,A)", lit * 0.45);
+    });
+  }
+
+  drawGateSprite(ctx, cam, w, h, tx, ty, af) {
+    this.withSprite(ctx, cam, w, h, tx, ty, (u, fog) => {
+      ctx.fillStyle = this.vGrad(ctx, -u * 1.2, 0, "#78716c", "#292524", fog);
+      ctx.beginPath(); ctx.moveTo(-u * 0.48, 0); ctx.lineTo(-u * 0.48, -u * 0.85); ctx.quadraticCurveTo(0, -u * 1.5, u * 0.48, -u * 0.85); ctx.lineTo(u * 0.48, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = this.shade("#451a03", 1, fog);
+      ctx.beginPath(); ctx.moveTo(-u * 0.32, 0); ctx.lineTo(-u * 0.32, -u * 0.8); ctx.quadraticCurveTo(0, -u * 1.2, u * 0.32, -u * 0.8); ctx.lineTo(u * 0.32, 0); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#facc15"; ctx.lineWidth = Math.max(1.5, u * 0.03);
+      ctx.beginPath(); ctx.arc(0, -u * 0.55, u * 0.14, 0, Math.PI * 2); ctx.moveTo(0, -u * 0.69); ctx.lineTo(0, -u * 0.41); ctx.moveTo(-u * 0.14, -u * 0.55); ctx.lineTo(u * 0.14, -u * 0.55); ctx.stroke();
+      this.glow(ctx, 0, -u * 0.55, u * 0.8, "rgba(250,204,21,A)", 0.25 + Math.sin(af * 0.1) * 0.08);
+    });
+  }
+
+  drawPortalSprite(ctx, cam, w, h, tx, ty, col, af) {
+    this.withSprite(ctx, cam, w, h, tx, ty, (u, fog) => {
+      const cy = -u * 0.55 - Math.sin(af * 0.08 + tx) * u * 0.04;
+      this.glow(ctx, 0, cy, u * 1.1, "rgba(255,255,255,A)", 0.12);
+      ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = u * 0.25;
+      for (let i = 0; i < 3; i++) {
+        ctx.lineWidth = Math.max(1.5, u * (0.06 - i * 0.015));
+        ctx.globalAlpha = 0.9 - i * 0.25;
+        ctx.beginPath(); ctx.ellipse(0, cy, u * (0.34 - i * 0.07), u * (0.5 - i * 0.1), af * 0.04 * (i % 2 ? -1 : 1), 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      ctx.fillStyle = "#e2e8f0";
+      for (let i = 0; i < 5; i++) {
+        const a = af * 0.05 + i * 1.26;
+        ctx.fillRect(Math.cos(a) * u * 0.3, cy + Math.sin(a) * u * 0.42, 2, 2);
+      }
+    });
+  }
+
+  drawPickupSprite(ctx, cam, w, h, tx, ty, af) {
+    this.withSprite(ctx, cam, w, h, tx, ty, (u, fog) => {
+      const fy = -u * 0.3 - Math.sin(af * 0.1 + tx * 2) * u * 0.05;
+      this.glow(ctx, 0, fy, u * 0.7, "rgba(74,222,128,A)", 0.4);
+      ctx.fillStyle = this.vGrad(ctx, fy - u * 0.2, fy + u * 0.2, "#bbf7d0", "#16a34a", fog);
+      ctx.beginPath(); ctx.moveTo(0, fy - u * 0.2); ctx.lineTo(u * 0.14, fy); ctx.lineTo(0, fy + u * 0.2); ctx.lineTo(-u * 0.14, fy); ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+  }
+
+  drawMonsterSprite(ctx, cam, w, h, tx, ty, o, af) {
+    const k = o.scale;
+    const seed = typeof tx === "object" ? 0 : tx;
+    this.withSprite(ctx, cam, w, h, tx, ty, (u0, fog) => {
+      const u = u0 * k;
+      const breathe = Math.sin(af * 0.08 + seed) * u * 0.015;
+      const tail = Math.sin(af * 0.12 + seed) * u * 0.18;
+      if (o.aura) this.glow(ctx, 0, -u * 0.5, u * 1.8, o.aura, 0.22 + Math.sin(af * 0.1) * 0.06);
+      // 尾巴 (斷尾後只剩斷面)
+      ctx.strokeStyle = this.shade(o.dark, 1, fog); ctx.lineCap = "round";
+      ctx.lineWidth = u * 0.14;
+      if (!o.noTail) {
+        ctx.beginPath(); ctx.moveTo(-u * 0.3, -u * 0.35); ctx.quadraticCurveTo(-u * 0.7, -u * 0.3 + tail, -u * 0.62 + tail * 0.5, -u * 0.7); ctx.stroke();
+      } else {
+        ctx.fillStyle = "#b91c1c"; ctx.beginPath(); ctx.arc(-u * 0.44, -u * 0.38, u * 0.06, 0, 7); ctx.fill();
+      }
+      ctx.strokeStyle = "rgba(8,12,20,0.85)"; ctx.lineWidth = Math.max(1, u * 0.025);
+      // 翼
+      if (o.wings) {
+        const fl = Math.sin(af * 0.15) * u * 0.12;
+        ctx.fillStyle = this.vGrad(ctx, -u * 1.2, -u * 0.4, o.wing, "#450a0a", fog);
+        [-1, 1].forEach(d => {
+          ctx.beginPath(); ctx.moveTo(d * u * 0.2, -u * 0.55);
+          ctx.quadraticCurveTo(d * u * 0.7, -u * 1.15 - fl, d * u * 0.95, -u * 0.8 - fl);
+          ctx.quadraticCurveTo(d * u * 0.75, -u * 0.7, d * u * 0.78, -u * 0.55 - fl * 0.3);
+          ctx.quadraticCurveTo(d * u * 0.5, -u * 0.52, d * u * 0.3, -u * 0.35); ctx.closePath(); ctx.fill(); ctx.stroke();
+        });
+      }
+      // 後腿與前腿
+      ctx.fillStyle = this.shade(o.dark, 0.85, fog);
+      [[-0.24, 0.12], [0.2, 0.12], [-0.08, 0.1], [0.34, 0.1]].forEach(([lx, lw]) => {
+        this.rrect(ctx, u * (lx - lw / 2), -u * 0.3, u * lw, u * 0.3, u * 0.04); ctx.fill(); ctx.stroke();
+      });
+      // 軀幹
+      ctx.fillStyle = this.vGrad(ctx, -u * 0.8, -u * 0.15, o.body, o.dark, fog);
+      ctx.beginPath(); ctx.ellipse(0, -u * 0.45 + breathe, u * 0.48, u * 0.3, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // 背脊
+      ctx.fillStyle = this.shade(o.spike, 1, fog);
+      for (let i = -3; i <= 3; i++) {
+        const sx = i * u * 0.12;
+        ctx.beginPath(); ctx.moveTo(sx - u * 0.05, -u * 0.7 + Math.abs(i) * u * 0.03); ctx.lineTo(sx, -u * 0.88 + Math.abs(i) * u * 0.05); ctx.lineTo(sx + u * 0.05, -u * 0.7 + Math.abs(i) * u * 0.03); ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+      // 腹部亮色
+      ctx.fillStyle = "rgba(255,255,255,0.10)";
+      ctx.beginPath(); ctx.ellipse(u * 0.05, -u * 0.38, u * 0.3, u * 0.14, 0, 0, Math.PI * 2); ctx.fill();
+      // 頭
+      const hx = u * 0.32, hy = -u * 0.62 + breathe;
+      ctx.fillStyle = this.vGrad(ctx, hy - u * 0.25, hy + u * 0.25, o.body, o.dark, fog);
+      ctx.beginPath(); ctx.ellipse(hx, hy, u * 0.26, u * 0.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // 吻部與牙
+      ctx.fillStyle = this.shade(o.dark, 1, fog);
+      ctx.beginPath(); ctx.ellipse(hx + u * 0.18, hy + u * 0.06, u * 0.16, u * 0.09, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#f8fafc";
+      ctx.beginPath(); ctx.moveTo(hx + u * 0.12, hy + u * 0.13); ctx.lineTo(hx + u * 0.15, hy + u * 0.21); ctx.lineTo(hx + u * 0.19, hy + u * 0.13); ctx.fill();
+      // 角
+      ctx.fillStyle = this.shade(o.horn, 1, fog);
+      [[-0.1, -1], [0.08, 1]].forEach(([ox, d]) => {
+        ctx.beginPath(); ctx.moveTo(hx + u * ox - u * 0.05, hy - u * 0.14);
+        ctx.quadraticCurveTo(hx + u * ox - u * 0.1, hy - u * 0.4, hx + u * ox + u * 0.1 * d - u * 0.02, hy - u * 0.52);
+        ctx.lineTo(hx + u * ox + u * 0.06, hy - u * 0.14); ctx.closePath(); ctx.fill(); ctx.stroke();
+      });
+      // 紅眼
+      ctx.fillStyle = "#ef4444"; ctx.shadowColor = "#ef4444"; ctx.shadowBlur = u * 0.15;
+      ctx.beginPath(); ctx.ellipse(hx + u * 0.1, hy - u * 0.04, u * 0.05, u * 0.035, -0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      // 破頭裂痕
+      if (o.headBroken) {
+        ctx.strokeStyle = "#facc15"; ctx.lineWidth = Math.max(1.5, u * 0.03);
+        ctx.beginPath(); ctx.moveTo(hx - u * 0.05, hy - u * 0.2); ctx.lineTo(hx + u * 0.02, hy - u * 0.05); ctx.lineTo(hx - u * 0.04, hy + u * 0.05); ctx.stroke();
+      }
+      // 受擊閃白 / 憤怒紅光
+      if (o.hurt) {
+        ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = "rgba(255,255,255,0.35)";
+        ctx.beginPath(); ctx.ellipse(0, -u * 0.45, u * 0.5, u * 0.32, 0, 0, 7); ctx.fill(); ctx.globalCompositeOperation = "source-over";
+      }
+      if (o.enraged) {
+        ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = `rgba(239,68,68,${0.16 + Math.sin(af * 0.2) * 0.06})`;
+        ctx.beginPath(); ctx.ellipse(0, -u * 0.45, u * 0.52, u * 0.34, 0, 0, 7); ctx.fill(); ctx.globalCompositeOperation = "source-over";
+      }
+    }, !!o.flip);
+  }
+
   draw3DFieldObject(ctx, cam, w, h, tx, ty, tile, chNum, pal, animFrame) {
     const ev = this.engine.resolveEventAt ? this.engine.resolveEventAt(tx, ty, tile) : this.engine.activeEvents[`${tx},${ty}`];
     const bob = Math.sin(animFrame * 0.1 + tx + ty) * 0.08;
 
     if (tile === "F") {
-      // 魔物獵人 3D 前線獵人帳篷 + 烤肉篝火
-      this.drawBox3D(ctx, cam, w, h, tx - 0.18, 0, ty - 0.15, 0.55, 0.52, 0.55, {
-        top: "#b45309",
-        front: "#92400e",
-        side: "#78350f",
-        sideDark: "#451a03",
-        stroke: "#facc15"
-      });
-      const flameH = 0.35 + Math.sin(animFrame * 0.25) * 0.08;
-      this.drawBox3D(ctx, cam, w, h, tx + 0.18, 0, ty + 0.15, 0.26, flameH, 0.26, {
-        top: "#fef08a",
-        front: "#f97316",
-        side: "#ea580c",
-        sideDark: "#c2410c",
-        stroke: "#fde047"
-      });
+      this.drawTentAndCampfire(ctx, cam, w, h, tx, ty, animFrame);
       return;
     }
 
     if (tile === "A") {
-      // 3D 龍職人工坊鐵砧與熔爐
-      this.drawBox3D(ctx, cam, w, h, tx, 0, ty, 0.62, 0.48, 0.42, {
-        top: "#94a3b8",
-        front: "#475569",
-        side: "#334155",
-        sideDark: "#1e293b",
-        stroke: "#38bdf8"
-      });
+      this.drawForgeSprite(ctx, cam, w, h, tx, ty, animFrame);
       return;
     }
 
     if (tile === "C" || tile === "U") {
-      // 3D 獵人公會支給品箱 / 遠古星魂聖棺
-      const isReliq = tile === "U";
-      this.drawBox3D(ctx, cam, w, h, tx, 0, ty, isReliq ? 0.68 : 0.52, isReliq ? 0.48 : 0.38, 0.46, {
-        top: isReliq ? "#facc15" : "#d97706",
-        front: isReliq ? "#a16207" : "#92400e",
-        side: "#78350f",
-        sideDark: "#451a03",
-        stroke: "#fef08a"
-      });
+      this.drawChestSprite(ctx, cam, w, h, tx, ty, tile === "U", animFrame);
       return;
     }
 
     if (tile === "S" || tile === "V" || tile === "R" || tile === "?") {
-      // 3D 古代龍人石碑 / 機關方尖碑
-      this.drawBox3D(ctx, cam, w, h, tx, 0, ty, 0.42, 0.88 + bob * 0.5, 0.42, {
-        top: "#38bdf8",
-        front: "#0284c7",
-        side: "#0369a1",
-        sideDark: "#0c4a6e",
-        stroke: "#bae6fd"
-      });
+      this.drawSteleSprite(ctx, cam, w, h, tx, ty, animFrame);
       return;
     }
 
     if (tile === "G") {
-      // 3D 封印巨門
-      this.drawBox3D(ctx, cam, w, h, tx, 0, ty, 0.92, 1.15, 0.28, {
-        top: "#f59e0b",
-        front: "#78350f",
-        side: "#451a03",
-        sideDark: "#290f02",
-        stroke: "#facc15"
-      });
+      this.drawGateSprite(ctx, cam, w, h, tx, ty, animFrame);
       return;
     }
 
     if (tile === "O" || tile === "P" || tile === ">" || tile === "<") {
-      // 3D 翔蟲躍遷柱 / 區域傳送門
       const col = tile === "P" ? "#c084fc" : tile === "O" ? "#38bdf8" : "#facc15";
-      this.drawBox3D(ctx, cam, w, h, tx, 0.05 + bob, ty, 0.48, 0.72, 0.48, {
-        top: "#ffffff",
-        front: col,
-        side: col,
-        sideDark: "#1e293b",
-        stroke: "#fef08a"
-      });
+      this.drawPortalSprite(ctx, cam, w, h, tx, ty, col, animFrame);
       return;
     }
 
     if (tile === "N") {
-      // 3D 公會接待員 / NPC
-      this.drawBox3D(ctx, cam, w, h, tx, 0, ty, 0.36, 0.56, 0.36, {
-        top: "#38bdf8",
-        front: "#0284c7",
-        side: "#0369a1",
-        sideDark: "#0c4a6e",
-        stroke: "#e0f2fe"
-      });
-      this.drawBox3D(ctx, cam, w, h, tx, 0.56, ty, 0.26, 0.24, 0.26, {
-        top: "#fde68a",
-        front: "#fcd34d",
-        side: "#f59e0b",
-        sideDark: "#d97706"
-      });
+      // 3D 立體 NPC：依名稱與座標雜湊決定服飾配色
+      const nm = (ev && (ev.name || ev.npc || ev.title)) || "";
+      const hsh = (tx * 7 + ty * 13) % 4;
+      const styles = [
+        { armor: "#a78bfa", armorDark: "#5b21b6", trim: "#fde68a", hat: "hat", hatCol: "#4c1d95", cape: null },
+        { armor: "#4ade80", armorDark: "#166534", trim: "#fef08a", hat: "hair", hair: "#92400e", cape: null },
+        { armor: "#fb923c", armorDark: "#9a3412", trim: "#ffffff", hat: "hood", cape: "#9a3412", capeDark: "#431407" },
+        { armor: "#f472b6", armorDark: "#9d174d", trim: "#fde68a", hat: "hair", hair: "#1e293b", cape: null }
+      ];
+      const st = Object.assign({}, styles[hsh]);
+      if (/長|老|奧爾森/.test(nm)) {
+        Object.assign(st, { hat: "hair", hair: "#e2e8f0", armor: "#94a3b8", armorDark: "#475569", cape: "#7c2d12", capeDark: "#431407" });
+      }
+      this.drawCharacterSprite(ctx, cam, w, h, tx, ty, Object.assign(st, {
+        skin: "#f1c9a5", legs: "#475569", bob: bob * 0.5, walk: animFrame * 0.05 + tx, scale: 1.1
+      }));
       return;
     }
 
     if (tile === "E" || tile === "B") {
-      // 3D 多部位巨型魔物立體模型（含頭部、軀幹、尾巴、雙翼與警戒紅眼）
+      // 立體魔物：依強度改變體型、配色、光環與雙翼
       const en = ev && this.engine.data.enemies[ev.enemyId];
       const isBoss = tile === "B" || (en && en.isBoss);
       const isElite = en && en.isElite;
-      const scale = isBoss ? 1.38 : isElite ? 1.15 : 0.92;
-      const bodyCol = isBoss ? "#dc2626" : isElite ? "#9333ea" : "#0ea5e9";
-      const darkCol = isBoss ? "#7f1d1d" : isElite ? "#581c87" : "#0369a1";
-      const hornCol = "#facc15";
-
-      // 軀幹 (Body)
-      this.drawBox3D(ctx, cam, w, h, tx, 0.15, ty, 0.56 * scale, 0.46 * scale, 0.66 * scale, {
-        top: bodyCol,
-        front: darkCol,
-        side: darkCol,
-        sideDark: "#0f172a",
-        stroke: isBoss ? "#facc15" : "#38bdf8"
-      });
-      // 頭部與龍角 (Head)
-      this.drawBox3D(ctx, cam, w, h, tx, 0.38 * scale, ty + 0.36 * scale, 0.38 * scale, 0.34 * scale, 0.36 * scale, {
-        top: hornCol,
-        front: bodyCol,
-        side: darkCol,
-        sideDark: "#0f172a",
-        stroke: "#fef08a"
-      });
-      // 尾巴 (Tail)
-      const tailSwing = Math.sin(animFrame * 0.12 + tx) * 0.14;
-      this.drawBox3D(ctx, cam, w, h, tx + tailSwing, 0.18 * scale, ty - 0.46 * scale, 0.22 * scale, 0.22 * scale, 0.45 * scale, {
-        top: bodyCol,
-        front: darkCol,
-        side: darkCol,
-        sideDark: "#0f172a"
-      });
-      // 首領巨翼
-      if (isBoss || isElite) {
-        const wingFlap = Math.sin(animFrame * 0.15) * 0.12;
-        this.drawBox3D(ctx, cam, w, h, tx - 0.48 * scale, (0.48 + wingFlap) * scale, ty, 0.42 * scale, 0.12 * scale, 0.52 * scale, {
-          top: "#f43f5e",
-          front: "#881337",
-          side: "#881337"
-        });
-        this.drawBox3D(ctx, cam, w, h, tx + 0.48 * scale, (0.48 + wingFlap) * scale, ty, 0.42 * scale, 0.12 * scale, 0.52 * scale, {
-          top: "#f43f5e",
-          front: "#881337",
-          side: "#881337"
-        });
-      }
+      this.drawMonsterSprite(ctx, cam, w, h, tx, ty, {
+        scale: isBoss ? 1.5 : isElite ? 1.2 : 0.95,
+        body: isBoss ? "#dc2626" : isElite ? "#9333ea" : "#0ea5e9",
+        dark: isBoss ? "#450a0a" : isElite ? "#3b0764" : "#082f49",
+        spike: isBoss ? "#fca5a5" : isElite ? "#e9d5ff" : "#bae6fd",
+        horn: "#fde68a",
+        wing: isBoss ? "#f43f5e" : "#c084fc",
+        wings: !!(isBoss || isElite),
+        aura: isBoss ? "rgba(239,68,68,A)" : isElite ? "rgba(168,85,247,A)" : null
+      }, animFrame);
       return;
     }
 
     // 其他採集物 / 手札 / 星泉 / 陷阱
-    this.drawBox3D(ctx, cam, w, h, tx, 0.05 + bob * 0.5, ty, 0.34, 0.34, 0.34, {
-      top: "#4ade80",
-      front: "#16a34a",
-      side: "#15803d",
-      sideDark: "#14532d",
-      stroke: "#bbf7d0"
-    });
+    this.drawPickupSprite(ctx, cam, w, h, tx, ty, animFrame);
+  }
+
+  // ==================== 角色立體精靈繪製 (面向鏡頭的漸層人物) ====================
+  rrect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  vGrad(ctx, y0, y1, c0, c1, fog) {
+    const g = ctx.createLinearGradient(0, y0, 0, y1);
+    g.addColorStop(0, this.shade(c0, 1, fog));
+    g.addColorStop(1, this.shade(c1, 1, fog));
+    return g;
+  }
+
+  // o: { cape, armor, armorDark, trim, skin, hair, hat('helm'|'hood'|'hat'|'none'), plume, weapon, weaponCol, bob, walk, scale }
+  drawCharacterSprite(ctx, cam, w, h, x, z, o) {
+    const p = typeof x === "object" ? { sx: x.sx, sy: x.sy, scale: x.u, depth: 0 } : this.projectPoint(x, 0, z, cam, w, h);
+    if (!p) return;
+    const u = p.scale * (o.scale || 1);
+    const fog = this.fogAt(p.depth) * 0.6;
+    const bob = (o.bob || 0) * u;
+    const sway = Math.sin((o.walk || 0)) * u * 0.05;
+    const ol = "rgba(8,12,20,0.85)";
+    ctx.save();
+    ctx.translate(p.sx, p.sy);
+    ctx.lineWidth = Math.max(1, u * 0.025);
+    ctx.strokeStyle = ol;
+
+    // 披風 (身後)
+    if (o.cape) {
+      ctx.fillStyle = this.vGrad(ctx, -u * 0.85, -u * 0.1, o.cape, o.capeDark || "#1e293b", fog);
+      ctx.beginPath();
+      ctx.moveTo(-u * 0.2, -u * 0.78 - bob);
+      ctx.lineTo(u * 0.2, -u * 0.78 - bob);
+      ctx.lineTo(u * 0.3 + sway, -u * 0.08);
+      ctx.lineTo(-u * 0.3 + sway, -u * 0.08);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // 背負武器
+    if (o.weapon) {
+      ctx.save();
+      ctx.translate(u * 0.2, -u * 0.55 - bob);
+      ctx.rotate(0.28);
+      const glow = ctx.createLinearGradient(0, -u * 0.55, 0, u * 0.35);
+      glow.addColorStop(0, "#ffffff");
+      glow.addColorStop(0.5, o.weaponCol || "#facc15");
+      glow.addColorStop(1, "#475569");
+      ctx.shadowColor = o.weaponCol || "#facc15";
+      ctx.shadowBlur = u * 0.18;
+      ctx.fillStyle = glow;
+      this.rrect(ctx, -u * 0.045, -u * 0.62, u * 0.09, u * 0.95, u * 0.03);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.stroke();
+      ctx.fillStyle = "#78350f";
+      ctx.fillRect(-u * 0.11, u * 0.12, u * 0.22, u * 0.05);
+      ctx.restore();
+    }
+
+    // 雙腿與靴
+    const legCol = o.legs || "#334155";
+    ctx.fillStyle = this.shade(legCol, 0.9, fog);
+    this.rrect(ctx, -u * 0.15, -u * 0.32, u * 0.12, u * 0.32 + Math.max(0, -sway) * 0.4, u * 0.03);
+    ctx.fill(); ctx.stroke();
+    this.rrect(ctx, u * 0.03, -u * 0.32, u * 0.12, u * 0.32 + Math.max(0, sway) * 0.4, u * 0.03);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = this.shade("#1c1917", 1, fog);
+    ctx.fillRect(-u * 0.17, -u * 0.05, u * 0.16, u * 0.05);
+    ctx.fillRect(u * 0.01, -u * 0.05, u * 0.16, u * 0.05);
+
+    // 軀幹
+    const ty0 = -u * 0.72 - bob;
+    const ty1 = -u * 0.28 - bob;
+    ctx.fillStyle = this.vGrad(ctx, ty0, ty1, o.armor, o.armorDark || o.armor, fog);
+    this.rrect(ctx, -u * 0.22, ty0, u * 0.44, ty1 - ty0, u * 0.07);
+    ctx.fill(); ctx.stroke();
+    // 肩甲
+    ctx.fillStyle = this.shade(o.trim || "#facc15", 0.95, fog);
+    ctx.beginPath(); ctx.ellipse(-u * 0.24, ty0 + u * 0.04, u * 0.1, u * 0.08, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(u * 0.24, ty0 + u * 0.04, u * 0.1, u * 0.08, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 腰帶與胸徽
+    ctx.fillStyle = this.shade("#451a03", 1, fog);
+    ctx.fillRect(-u * 0.22, ty1 - u * 0.07, u * 0.44, u * 0.06);
+    ctx.fillStyle = this.shade(o.trim || "#facc15", 1, fog);
+    ctx.fillRect(-u * 0.025, ty1 - u * 0.075, u * 0.05, u * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(0, ty0 + u * 0.07); ctx.lineTo(u * 0.06, ty0 + u * 0.15); ctx.lineTo(0, ty0 + u * 0.23); ctx.lineTo(-u * 0.06, ty0 + u * 0.15);
+    ctx.closePath(); ctx.fill();
+
+    // 手臂與手
+    ctx.fillStyle = this.shade(o.armorDark || o.armor, 1, fog);
+    this.rrect(ctx, -u * 0.3, ty0 + u * 0.08, u * 0.08, u * 0.3, u * 0.03); ctx.fill(); ctx.stroke();
+    this.rrect(ctx, u * 0.22, ty0 + u * 0.08, u * 0.08, u * 0.3, u * 0.03); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = this.shade(o.skin || "#f5d0a9", 1, fog);
+    ctx.beginPath(); ctx.arc(-u * 0.26, ty0 + u * 0.4, u * 0.045, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(u * 0.26, ty0 + u * 0.4, u * 0.045, 0, Math.PI * 2); ctx.fill();
+
+    // 頭部
+    const hy = ty0 - u * 0.15;
+    const hr = u * 0.17;
+    const skinG = ctx.createRadialGradient(-hr * 0.3, hy - hr * 0.3, hr * 0.1, 0, hy, hr);
+    skinG.addColorStop(0, this.shade(o.skin || "#f5d0a9", 1.08, fog));
+    skinG.addColorStop(1, this.shade(o.skin || "#f5d0a9", 0.78, fog));
+    ctx.fillStyle = skinG;
+    ctx.beginPath(); ctx.arc(0, hy, hr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 臉
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(-hr * 0.5, hy - hr * 0.05, hr * 0.28, hr * 0.28);
+    ctx.fillRect(hr * 0.22, hy - hr * 0.05, hr * 0.28, hr * 0.28);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(-hr * 0.42, hy, hr * 0.1, hr * 0.1);
+    ctx.fillRect(hr * 0.3, hy, hr * 0.1, hr * 0.1);
+    ctx.fillStyle = "rgba(244,63,94,0.35)";
+    ctx.fillRect(-hr * 0.7, hy + hr * 0.3, hr * 0.3, hr * 0.15);
+    ctx.fillRect(hr * 0.4, hy + hr * 0.3, hr * 0.3, hr * 0.15);
+
+    // 頭髮 / 頭盔 / 兜帽 / 帽
+    const hat = o.hat || "hair";
+    if (hat === "helm") {
+      ctx.fillStyle = this.vGrad(ctx, hy - hr * 1.2, hy, "#fde68a", "#ca8a04", fog);
+      ctx.beginPath(); ctx.arc(0, hy - hr * 0.1, hr * 1.12, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = this.shade(o.plume || "#ef4444", 1, fog);
+      ctx.beginPath();
+      ctx.moveTo(-hr * 0.15, hy - hr * 1.05);
+      ctx.quadraticCurveTo(hr * 0.2 + sway * 2, hy - hr * 2.1, hr * 1.1, hy - hr * 1.4);
+      ctx.quadraticCurveTo(hr * 0.5, hy - hr * 1.3, hr * 0.2, hy - hr * 1.0);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (hat === "hood") {
+      ctx.fillStyle = this.vGrad(ctx, hy - hr * 1.3, hy + hr, o.armor, o.armorDark || o.armor, fog);
+      ctx.beginPath(); ctx.arc(0, hy - hr * 0.05, hr * 1.2, Math.PI * 0.95, Math.PI * 0.05, false); ctx.lineTo(hr * 0.8, hy + hr * 0.2); ctx.lineTo(-hr * 0.8, hy + hr * 0.2); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if (hat === "hat") {
+      ctx.fillStyle = this.shade(o.hatCol || "#78350f", 1, fog);
+      ctx.beginPath(); ctx.ellipse(0, hy - hr * 0.7, hr * 1.55, hr * 0.38, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, hy - hr * 0.75, hr * 0.85, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else {
+      ctx.fillStyle = this.shade(o.hair || "#7c2d12", 1, fog);
+      ctx.beginPath(); ctx.arc(0, hy - hr * 0.1, hr * 1.1, Math.PI * 1.02, Math.PI * 1.98); ctx.lineTo(hr * 1.0, hy - hr * 0.1); ctx.lineTo(hr * 0.5, hy - hr * 0.55); ctx.lineTo(-hr * 0.2, hy - hr * 0.45); ctx.lineTo(-hr * 0.7, hy - hr * 0.25); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  drawPalicoSprite(ctx, cam, w, h, x, z, animFrame) {
+    const p = this.projectPoint(x, 0, z, cam, w, h);
+    if (!p) return;
+    const u = p.scale * 0.8;
+    const hop = Math.abs(Math.sin(animFrame * 0.2)) * u * 0.08;
+    ctx.save();
+    ctx.translate(p.sx, p.sy - hop);
+    ctx.lineWidth = Math.max(1, u * 0.03);
+    ctx.strokeStyle = "rgba(8,12,20,0.85)";
+    // 影子
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.beginPath(); ctx.ellipse(0, hop, u * 0.22, u * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+    // 尾巴
+    ctx.strokeStyle = "#0d9488"; ctx.lineWidth = u * 0.07; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(u * 0.15, -u * 0.12);
+    ctx.quadraticCurveTo(u * 0.4, -u * 0.2 + Math.sin(animFrame * 0.15) * u * 0.08, u * 0.3, -u * 0.5); ctx.stroke();
+    ctx.strokeStyle = "rgba(8,12,20,0.85)"; ctx.lineWidth = Math.max(1, u * 0.03);
+    // 身體
+    const bg = ctx.createLinearGradient(0, -u * 0.4, 0, 0);
+    bg.addColorStop(0, "#5eead4"); bg.addColorStop(1, "#0f766e");
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.ellipse(0, -u * 0.17, u * 0.2, u * 0.17, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 頭
+    ctx.beginPath(); ctx.arc(0, -u * 0.42, u * 0.17, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // 耳
+    ctx.beginPath(); ctx.moveTo(-u * 0.16, -u * 0.5); ctx.lineTo(-u * 0.14, -u * 0.72); ctx.lineTo(-u * 0.03, -u * 0.58); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(u * 0.16, -u * 0.5); ctx.lineTo(u * 0.14, -u * 0.72); ctx.lineTo(u * 0.03, -u * 0.58); ctx.closePath(); ctx.fill(); ctx.stroke();
+    // 臉
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(-u * 0.09, -u * 0.46, u * 0.055, u * 0.07);
+    ctx.fillRect(u * 0.035, -u * 0.46, u * 0.055, u * 0.07);
+    ctx.fillStyle = "#fda4af";
+    ctx.fillRect(-u * 0.02, -u * 0.38, u * 0.04, u * 0.03);
+    ctx.restore();
   }
 
   draw3DHunterOnField(ctx, cam, w, h, hx, hz, animFrame) {
     const bob = Math.sin(animFrame * 0.16) * 0.04;
+    // 地面落影
+    const shP = this.projectPoint(hx, 0.01, hz, cam, w, h);
+    if (shP) {
+      const sr = Math.max(8, (this.projectPoint(hx + 0.45, 0.01, hz, cam, w, h) || shP).sx - shP.sx);
+      ctx.fillStyle = "rgba(0,0,0,0.42)";
+      ctx.beginPath();
+      ctx.ellipse(shP.sx, shP.sy, sr, sr * 0.38, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     const elemColors = {
       physical: "#facc15",
       star: "#38bdf8",
@@ -710,49 +1327,16 @@ class MH3DRenderer {
       ctx.restore();
     }
 
-    // 獵人雙腿與重甲靴
-    this.drawBox3D(ctx, cam, w, h, hx, 0, hz, 0.32, 0.28, 0.28, {
-      top: "#334155",
-      front: "#1e293b",
-      side: "#0f172a",
-      sideDark: "#090d16"
-    });
-    // 獵人星隕龍鎧胸甲與披風
-    this.drawBox3D(ctx, cam, w, h, hx, 0.28 + bob, hz, 0.42, 0.38, 0.32, {
-      top: "#38bdf8",
-      front: "#0284c7",
-      side: "#1d4ed8",
-      sideDark: "#1e3a8a",
-      stroke: "#e0f2fe"
-    });
-    // 獵人頭盔與紅蓮狩獵羽飾
-    this.drawBox3D(ctx, cam, w, h, hx, 0.66 + bob, hz, 0.28, 0.26, 0.28, {
-      top: "#facc15",
-      front: "#eab308",
-      side: "#ca8a04",
-      sideDark: "#854d0e",
-      stroke: "#fef08a"
-    });
-    // 背負式《魔物獵人》巨型大劍 / 太刀 (隨武器附魔散發元素光芒)
-    this.drawBox3D(ctx, cam, w, h, hx + 0.24, 0.24 + bob, hz + 0.12, 0.12, 0.78, 0.16, {
-      top: "#ffffff",
-      front: wepCol,
-      side: wepCol,
-      sideDark: "#475569",
-      stroke: "#ffffff"
+    // 獵人立體角色 (星隕龍鎧、金色羽飾頭盔、藍色披風、背負武器)
+    this.drawCharacterSprite(ctx, cam, w, h, hx, hz, {
+      cape: "#1d4ed8", capeDark: "#172554",
+      armor: "#38bdf8", armorDark: "#0369a1", trim: "#facc15",
+      legs: "#334155", skin: "#f5d0a9", hat: "helm", plume: "#ef4444",
+      weapon: true, weaponCol: wepCol, bob: bob + 0.02, walk: animFrame * 0.2, scale: 1.25
     });
 
     // 隨行艾露星貓夥伴 (Palico Companion)
-    const petX = hx - 0.55;
-    const petZ = hz + 0.25;
-    const petBob = Math.abs(Math.sin(animFrame * 0.2)) * 0.08;
-    this.drawBox3D(ctx, cam, w, h, petX, petBob, petZ, 0.26, 0.34, 0.26, {
-      top: "#2dd4bf",
-      front: "#0d9488",
-      side: "#0f766e",
-      sideDark: "#115e59",
-      stroke: "#99f6e4"
-    });
+    this.drawPalicoSprite(ctx, cam, w, h, hx - 0.55, hz + 0.25, animFrame);
   }
 
   // 《魔物獵人》經典翠綠導蟲 (Scoutflies) 3D 粒子流
@@ -953,34 +1537,47 @@ class MH3DRenderer {
 
     ctx.clearRect(0, 0, w, h);
 
-    // 1. 3D 戰鬥競技場天幕與透視地坪
-    const horizonY = 58;
+    // 1. 戰鬥競技場：與探索場景一致的天空、遠山與草地
+    const horizonY = 62;
     const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
     skyGrad.addColorStop(0, pal.skyTop);
     skyGrad.addColorStop(1, pal.skyHorizon);
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, w, horizonY);
+    const bsx = w * 0.7;
+    const bsun = ctx.createRadialGradient(bsx, horizonY, 3, bsx, horizonY, 150);
+    bsun.addColorStop(0, `rgba(${pal.sun || "255, 240, 190"}, 0.8)`);
+    bsun.addColorStop(1, `rgba(${pal.sun || "255, 240, 190"}, 0)`);
+    ctx.fillStyle = bsun;
+    ctx.fillRect(0, 0, w, horizonY + 20);
+    ctx.fillStyle = pal.mountain || "rgba(8, 13, 24, 0.72)";
+    ctx.beginPath();
+    ctx.moveTo(0, horizonY + 2);
+    for (let mxp = 0; mxp <= w + 40; mxp += 40) {
+      ctx.lineTo(mxp, horizonY - 14 - Math.abs(Math.sin(mxp * 0.013 + chNum)) * 26);
+    }
+    ctx.lineTo(w, horizonY + 2);
+    ctx.closePath();
+    ctx.fill();
 
     const floorGrad = ctx.createLinearGradient(0, horizonY, 0, h);
-    floorGrad.addColorStop(0, pal.groundB);
-    floorGrad.addColorStop(1, "#060911");
+    floorGrad.addColorStop(0, pal.bgMid || pal.groundB);
+    floorGrad.addColorStop(1, pal.bgBottom || "#060911");
     ctx.fillStyle = floorGrad;
     ctx.fillRect(0, horizonY, w, h - horizonY);
 
-    // 3D 深度放射格線與遠景岩柱
+    // 地面透視紋理（淡）
     ctx.strokeStyle = pal.groundStroke;
-    ctx.lineWidth = 1.2;
-    for (let gx = -160; gx <= w + 160; gx += 56) {
+    ctx.lineWidth = 1;
+    for (let gx = -160; gx <= w + 160; gx += 70) {
       ctx.beginPath();
       ctx.moveTo(w * 0.5 + (gx - w * 0.5) * 0.35, horizonY);
       ctx.lineTo(gx, h);
       ctx.stroke();
     }
-    for (let gy = horizonY + 18; gy < h; gy += 26) {
-      ctx.beginPath();
-      ctx.moveTo(0, gy);
-      ctx.lineTo(w, gy);
-      ctx.stroke();
+    ctx.fillStyle = pal.day ? this.shade(pal.detailA || "#86efac", 0.9, 0.1) : pal.accent;
+    for (let i = 0; i < 40; i++) {
+      ctx.fillRect((i * 97) % w, horizonY + 14 + ((i * 53) % (h - horizonY - 16)), 2, 2);
     }
 
     // 2. 左側：3D 尋星獵人艾爾文與隨行艾露貓 (含揮砍衝刺與太刀見切殘影)
@@ -1001,15 +1598,15 @@ class MH3DRenderer {
       ctx.restore();
     }
 
-    // 繪製 3D 獵人背影/側身立體裝甲與大劍
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    ctx.beginPath();
-    ctx.ellipse(hx, hy + 4, 36, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const bElemCols = { physical: "#facc15", star: "#38bdf8", fire: "#f97316", frost: "#7dd3fc", void: "#c084fc" };
+    this.drawCharacterSprite(ctx, null, w, h, { sx: hx, sy: hy + 8, u: 62 }, 0, {
+      cape: "#1d4ed8", capeDark: "#172554", armor: "#38bdf8", armorDark: "#0369a1", trim: "#facc15",
+      legs: "#334155", skin: "#f5d0a9", hat: "helm", plume: "#ef4444", weapon: true,
+      weaponCol: bElemCols[s.weaponElement || "physical"] || "#facc15",
+      bob: Math.sin(animFrame * 0.1) * 0.02, walk: lunge > 0 ? animFrame * 0.5 : 0, scale: 1.25
+    });
 
     if (this.ui.px) {
-      const frame2 = Math.floor(animFrame / 18) % 2;
-      this.ui.px.drawSprite(ctx, frame2 ? "hero_1" : "hero_0", hx - 38, hy - 82, 78);
       const petObj = this.engine.data.companions[s.companion || "lumi"];
       if (petObj) {
         const petBob = Math.sin(animFrame * 0.16) * 4;
@@ -1048,40 +1645,36 @@ class MH3DRenderer {
     ctx.ellipse(mx + 10, h - 22, 95, 18, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 繪製 3D 魔物尾巴部件 (若未斷尾則連接於後方擺動；若已斷尾則繪製斷面與掉落地面之斷尾)
-    const tailSwing = Math.sin(animFrame * 0.14) * 8;
-    const tailBox = { key: "tail", x: mx + 58, y: my - 18 + tailSwing, w: 72, h: 48 };
-    if (!parts.tail.broken) {
-      ctx.fillStyle = c.enraged ? "#991b1b" : "#1e293b";
-      ctx.strokeStyle = c.enraged ? "#f43f5e" : "#64748b";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(mx + 35, my + 8);
-      ctx.lineTo(mx + 105, my - 14 + tailSwing);
-      ctx.lineTo(mx + 126, my + 4 + tailSwing);
-      ctx.lineTo(mx + 95, my + 24 + tailSwing);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      // 已斷尾：在地面顯示可剝取的斷尾殘骸
-      ctx.fillStyle = "#475569";
-      ctx.fillRect(mx + 82, h - 34, 38, 14);
+    // 立體魔物（面向獵人，部位破壞與斷尾同步反映在模型上）
+    const bk = c.isBoss ? 1.3 : 1.0;
+    const bu = 105;
+    const feetY = h - 22;
+    const isElite = !!(c.isElite);
+    this.drawMonsterSprite(ctx, null, w, h, { sx: mx, sy: feetY + breathe * 0.3, u: bu }, 0, {
+      scale: bk,
+      body: c.isBoss ? "#dc2626" : isElite ? "#9333ea" : "#0ea5e9",
+      dark: c.isBoss ? "#450a0a" : isElite ? "#3b0764" : "#082f49",
+      spike: c.isBoss ? "#fca5a5" : isElite ? "#e9d5ff" : "#bae6fd",
+      horn: "#fde68a", wing: c.isBoss ? "#f43f5e" : "#c084fc",
+      wings: !!(c.isBoss || isElite),
+      aura: c.isBoss ? "rgba(239,68,68,A)" : null,
+      flip: true, noTail: !!parts.tail.broken, headBroken: !!parts.head.broken,
+      hurt: c.shake > 0, enraged: !!c.enraged
+    }, animFrame);
+    if (parts.tail.broken) {
       ctx.fillStyle = "#facc15";
       ctx.font = "bold 10px 'PingFang TC', monospace";
       ctx.textAlign = "center";
-      ctx.fillText("[已斷尾!]", mx + 101, h - 38);
+      ctx.fillText("[已斷尾!]", mx + 50 * bk, h - 8);
     }
 
-    // 繪製魔物本體精靈與 3D 裝甲層
-    const bossSz = c.isBoss ? 116 : 98;
-    if (this.ui.px) {
-      this.ui.px.drawSprite(ctx, c.icon || "enemy_wolf", mx - bossSz * 0.5, my - bossSz * 0.5 + breathe, bossSz);
-    }
-
-    const headBox = { key: "head", x: mx - 76, y: my - 46 + breathe, w: 58, h: 54 };
-    const bodyBox = { key: "body", x: mx - 18, y: my - 38 + breathe, w: 74, h: 68 };
-    this.partHitboxes = [headBox, bodyBox, tailBox];
+    // 部位命中框（對應立體魔物：頭在左前、軀幹居中、尾在右後）
+    const uu = bu * bk;
+    const headBox = { key: "head", x: mx - 0.58 * uu, y: feetY - 0.85 * uu + breathe, w: 0.52 * uu, h: 0.45 * uu };
+    const bodyBox = { key: "body", x: mx - 0.4 * uu, y: feetY - 0.78 * uu + breathe, w: 0.8 * uu, h: 0.6 * uu };
+    const tailBox = { key: "tail", x: mx + 0.32 * uu, y: feetY - 0.8 * uu, w: 0.45 * uu, h: 0.5 * uu };
+    // 頭優先於軀幹判定
+    this.partHitboxes = [headBox, tailBox, bodyBox];
 
     // 繪製三部位鎖定準星與部位耐久條 (Monster Hunter Part Break Reticle)
     this.partHitboxes.forEach(pb => {
@@ -1090,6 +1683,7 @@ class MH3DRenderer {
       const isSelected = targetPart === pb.key;
       const cx = pb.x + pb.w * 0.5;
       const cy = pb.y + pb.h * 0.5;
+      const lblDX = pb.key === "head" ? -26 : pb.key === "tail" ? 30 : 0;
 
       if (isSelected) {
         ctx.save();
@@ -1112,24 +1706,24 @@ class MH3DRenderer {
       }
 
       // 部位標籤與迷你耐久條
-      const labelY = pb.y - 6;
+      const labelY = pb.key === "body" ? pb.y + pb.h + 4 : pb.y - 6;
       const pct = Math.max(0, Math.min(1, pState.hp / pState.maxHp));
       ctx.fillStyle = "rgba(9, 13, 22, 0.86)";
-      ctx.fillRect(cx - 30, labelY - 12, 60, 16);
+      ctx.fillRect(cx + lblDX - 30, labelY - 12, 60, 16);
       ctx.strokeStyle = pState.broken ? "#ef4444" : isSelected ? "#facc15" : "#475569";
       ctx.lineWidth = isSelected ? 1.5 : 1;
-      ctx.strokeRect(cx - 30, labelY - 12, 60, 16);
+      ctx.strokeRect(cx + lblDX - 30, labelY - 12, 60, 16);
 
       ctx.fillStyle = pState.broken ? "#fca5a5" : isSelected ? "#fef08a" : "#cbd5e1";
       ctx.font = "bold 10px 'PingFang TC', monospace";
       ctx.textAlign = "center";
-      ctx.fillText(pState.broken ? `${pState.name}[破]` : `${pState.name}`, cx, labelY - 4);
+      ctx.fillText(pState.broken ? `${pState.name}[破]` : `${pState.name}`, cx + lblDX, labelY - 4);
 
       if (!pState.broken) {
         ctx.fillStyle = "#1e293b";
-        ctx.fillRect(cx - 26, labelY + 5, 52, 4);
+        ctx.fillRect(cx + lblDX - 26, labelY + 5, 52, 4);
         ctx.fillStyle = isSelected ? "#facc15" : "#38bdf8";
-        ctx.fillRect(cx - 26, labelY + 5, Math.round(52 * pct), 4);
+        ctx.fillRect(cx + lblDX - 26, labelY + 5, Math.round(52 * pct), 4);
       }
     });
 

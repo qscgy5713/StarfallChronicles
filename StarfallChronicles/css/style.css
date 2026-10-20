@@ -28,11 +28,12 @@ body {
   font-family: "Courier New", -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", monospace;
   background: radial-gradient(circle at 50% 18%, #0f1b33 0%, #070b16 55%, #04060c 100%);
   color: var(--text-main);
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   user-select: none;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .px-icon {
@@ -48,7 +49,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 18px;
+  padding: 5px 14px;
+  flex-shrink: 0;
   background: linear-gradient(180deg, #131f38 0%, #0a1020 100%);
   border-bottom: 3px solid #475569;
   box-shadow: inset 0 -1px 0 #facc15, 0 4px 12px rgba(0, 0, 0, 0.6);
@@ -89,8 +91,8 @@ body {
   color: var(--text-main);
   border: 2px solid #475569;
   box-shadow: inset -2px -2px 0 #090d16, inset 2px 2px 0 #64748b;
-  padding: 5px 10px;
-  font-size: 12.5px;
+  padding: 4px 8px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
@@ -109,11 +111,12 @@ body {
 .guide-banner {
   background: linear-gradient(90deg, #172554, #1e1b4b, #172554);
   border-bottom: 3px solid var(--accent-gold);
-  padding: 9px 18px;
+  padding: 5px 14px;
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .guide-main-row {
@@ -126,6 +129,10 @@ body {
 }
 
 .guide-sub-row {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 52vw;
   font-size: 12px;
   color: #bae6fd;
   margin-top: 2px;
@@ -136,8 +143,8 @@ body {
   color: #fef08a;
   border: 2px solid var(--accent-gold);
   box-shadow: inset -2px -2px 0 #422006, inset 2px 2px 0 #fde047;
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 4px 8px;
+  font-size: 12px;
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
@@ -153,22 +160,26 @@ body {
 .main-workspace {
   display: grid;
   grid-template-columns: 265px 1fr 280px;
-  gap: 12px;
-  padding: 12px 16px;
-  max-width: 1600px;
+  gap: 10px;
+  padding: 8px 12px;
+  max-width: 1800px;
   width: 100%;
   margin: 0 auto;
   flex: 1;
+  min-height: 0;
 }
 
 .side-panel {
   background: linear-gradient(180deg, #111c33 0%, #0b1324 100%);
   border: 3px solid #475569;
   box-shadow: inset 0 0 0 1px #1e293b, inset 0 2px 0 rgba(250, 204, 21, 0.25), 5px 5px 0 #000;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .panel-section-title {
@@ -318,6 +329,9 @@ body {
   justify-content: flex-start;
   gap: 8px;
   position: relative;
+  min-height: 0;
+  min-width: 0;
+  container-type: size;
 }
 
 .canvas-wrapper {
@@ -326,12 +340,15 @@ body {
   outline: 2px solid #facc15;
   box-shadow: 0 0 28px rgba(56, 189, 248, 0.18), 7px 7px 0 #000;
   background: #070a12;
+  width: min(100cqw, 150cqh);
+  aspect-ratio: 3 / 2;
+  margin: auto;
 }
 
 #map-canvas {
   display: block;
-  max-width: 100%;
-  height: auto;
+  width: 100%;
+  height: 100%;
   cursor: pointer;
 }
 
@@ -343,8 +360,9 @@ body {
   display: none;
   flex-direction: column;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 8px 12px;
   z-index: 25;
+  overflow-y: auto;
 }
 
 .combat-overlay.active {
@@ -549,8 +567,7 @@ body {
 
 .adventure-log-box {
   flex: 1;
-  min-height: 220px;
-  max-height: 340px;
+  min-height: 120px;
   overflow-y: auto;
   background: #060911;
   border: 2px solid var(--border-subtle);
@@ -820,6 +837,11 @@ body {
   margin-top: 8px;
 }
 
-@media (max-width: 1180px) {
-  .main-workspace { grid-template-columns: 1fr; }
+@media (max-width: 1000px) {
+  .main-workspace { grid-template-columns: 200px 1fr 220px; }
 }
+
+/* 一屏顯示：壓縮頂部區域高度 */
+.brand-title { white-space: nowrap; font-size: 15px; }
+.brand-box > div > div:nth-child(2) { display: none; }
+.chapter-badge { max-width: 30vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

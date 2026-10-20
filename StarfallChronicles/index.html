@@ -226,8 +226,8 @@
   <div id="modal-intro" class="modal-overlay active">
     <div class="modal-card" style="max-width: 680px;">
       <div class="modal-header">
-        <h2>《星隕編年史：霧海遺城》— 16-Bit 像素冒險指南</h2>
-        <button class="modal-close" onclick="window.gameUI.closeModals()">X</button>
+        <h2>《星隕編年史：霧海遺城》— 3D 魔物獵人狩獵冒險指南</h2>
+        <button class="modal-close" onclick="safeCloseIntro()">X</button>
       </div>
       <div class="modal-body">
         <div style="display: flex; gap: 16px; align-items: center; background: #162032; padding: 12px; border: 2px solid #334155;">
@@ -235,24 +235,24 @@
           <div>
             <h3 style="color: #facc15; margin-bottom: 6px; font-size: 16px;">故事背景與你的目標</h3>
             <p style="font-size: 13.5px; line-height: 1.65; color: #e2e8f0;">
-              三十年前，「星隕之夜」墜落的活體星辰讓整座王國被紫霧籠罩。你扮演年輕的尋星者<strong>艾爾文</strong>，帶著微光星狐<strong>露米</strong>，從微光漁村出發探索<strong>五大章節、共 15 座相連的多層迷宮區域</strong>，完成 NPC 支線委託、挑戰區域菁英與章節首領！
+              三十年前，「星隕之夜」墜落的活體星辰讓整座王國被紫霧籠罩。你扮演年輕的尋星獵人<strong>艾爾文</strong>，帶著隨行艾露星貓<strong>露米</strong>，從微光漁村出發探索<strong>五大章節、共 15 座相連的 3D 巨型狩獵場</strong>，完成公會委託、挑戰各區菁英與古龍種巨型魔物！
             </p>
           </div>
         </div>
 
         <div class="inv-card equipped" style="padding: 12px;">
-          <div style="color: #38bdf8; font-weight: 800; font-size: 14px; margin-bottom: 6px;">四大核心系統指南</div>
+          <div style="color: #38bdf8; font-weight: 800; font-size: 14px; margin-bottom: 6px;">3D 魔物獵人核心系統指南</div>
           <p style="font-size: 13px; line-height: 1.65; color: #f1f5f9;">
-            1. <strong>多層迷宮與戰爭迷霧探索</strong>：每章包含 3 個子區域（透過階梯 <strong>[&gt;]</strong> 與 <strong>[&lt;]</strong> 往返），請親自探索驅散迷霧；若卡關可隨時點擊頂部開啟「星輝羅盤導引」。<br />
-            2. <strong>屬性弱點與破盾 (Break) 戰鬥</strong>：每種魔物皆有<strong>弱點屬性（物理/星芒/烈焰/寒霜）</strong>，使用對應屬性技能可造成 <strong>1.25 倍傷害並額外削減 +1 韌性護盾</strong>；打空護盾可使敵人暈眩並承受 1.4 倍傷害！<br />
-            3. <strong>手札線索解謎與支線委託</strong>：迷宮中的密碼鎖需先尋找並閱讀《星辰手札》卷軸取得線索；完成右側支線委託可獲得豐厚金幣與稀有秘寶。<br />
-            4. <strong>裝備部位淬煉強化 (+1 ~ +5)</strong>：於「鍛造工坊」不僅能合成神兵，還可淬煉強化武器、防具與聖物部位，更換新裝備時永久保留強化等級！
+            1. <strong>3D 越肩狩獵視角與導蟲引路</strong>：遊戲預設進入 3D 越肩狩獵模式，翠綠導蟲會在 3D 空間中為你引路；按 <strong>[V]</strong> 鍵可切換 3D越肩 / 3D廣角 / 2D像素，按 <strong>[J] / [L]</strong> 鍵旋轉鏡頭。<br />
+            2. <strong>武器斬味與砥石研磨 [R]</strong>：維持紫斬享 1.38 倍超高傷害加成；按 <strong>[R]</strong> 鍵可研磨砥石回滿斬味並獲得【剛刃研磨】。<br />
+            3. <strong>魔物三部位鎖定破壞與斷尾</strong>：戰鬥中可直接滑鼠點擊魔物【頭部】（氣絕 KO）、【軀幹】（弱點肉質）、【尾巴】（累積斬擊斷尾剝取素材）。<br />
+            4. <strong>太刀見切迴避斬 [X] 與星辰貓飯 [G]</strong>：見切看破魔物攻擊無傷反擊升階氣刃刃色；出獵前在營火或按 <strong>[G]</strong> 鍵享用貓飯獲得強大料理增益！
           </p>
         </div>
 
         <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
-          <button class="btn-primary" style="font-size: 15px; padding: 10px 24px;" onclick="window.gameUI.closeModals()">
-            開始像素冒險 [按 Space 或點擊此處]
+          <button class="btn-primary" style="font-size: 15px; padding: 10px 24px;" onclick="safeCloseIntro()">
+            啟程出獵！進入 3D 狩獵世界 [按 Space 或點擊此處]
           </button>
         </div>
       </div>
@@ -466,26 +466,43 @@
 
   <div id="toast-container"></div>
 
-  <script src="js/pixel_art.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/audio.js"></script>
-  <script src="js/engine.js"></script>
-  <script src="js/mh3d.js"></script>
-  <script src="js/ui.js"></script>
+  <script src="js/pixel_art.js?v=4.0.1"></script>
+  <script src="js/data.js?v=4.0.1"></script>
+  <script src="js/audio.js?v=4.0.1"></script>
+  <script src="js/engine.js?v=4.0.1"></script>
+  <script src="js/mh3d.js?v=4.0.1"></script>
+  <script src="js/ui.js?v=4.0.1"></script>
   <script>
     function toggleAudioMute() {
-      const isMuted = window.soundSystem.toggleMute();
-      const btn = document.getElementById("btn-mute");
-      btn.textContent = isMuted ? "音樂：關" : "音樂：開";
+      if (window.soundSystem) {
+        const isMuted = window.soundSystem.toggleMute();
+        const btn = document.getElementById("btn-mute");
+        if (btn) btn.textContent = isMuted ? "音樂：關" : "音樂：開";
+      }
+    }
+
+    function safeCloseIntro() {
+      if (window.gameUI && typeof window.gameUI.closeModals === "function") {
+        window.gameUI.closeModals();
+      } else {
+        document.querySelectorAll(".modal-overlay").forEach(el => el.classList.remove("active"));
+      }
     }
 
     window.addEventListener("DOMContentLoaded", () => {
-      window.gameEngine = new StarfallEngine(window.GAME_DATA);
-      window.gameUI = new GameUI(window.gameEngine);
+      try {
+        window.gameEngine = new StarfallEngine(window.GAME_DATA);
+        window.gameUI = new GameUI(window.gameEngine);
+      } catch (err) {
+        console.error("Game initialization error:", err);
+      }
+
       document.body.addEventListener("click", function initAudioOnce() {
-        window.soundSystem.init();
-        if (!window.soundSystem.bgmTimer && !window.soundSystem.muted) {
-          window.soundSystem.startBGM("explore", window.gameEngine.state.chapter);
+        if (window.soundSystem) {
+          window.soundSystem.init();
+          if (!window.soundSystem.bgmTimer && !window.soundSystem.muted && window.gameEngine) {
+            window.soundSystem.startBGM("explore", window.gameEngine.state.chapter);
+          }
         }
         document.body.removeEventListener("click", initAudioOnce);
       });
