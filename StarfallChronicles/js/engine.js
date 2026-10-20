@@ -90,6 +90,8 @@ class StarfallEngine {
       loreUnlocked: [],
       achievements: [],
       bestiaryKills: {},
+      board: { prog: {}, done: [] },
+      train: {},
       stats: {
         battlesWon: 0,
         shieldsBroken: 0,
@@ -143,6 +145,11 @@ class StarfallEngine {
     let def = s.baseDef + (s.level - 1) * 3 + (t.vitality || 0) * 2 + (t.guardian || 0) * 3;
     let crit = s.baseCrit + (t.precision || 0) * 4;
     let mpRegen = 6 + (t.arcane || 0) * 3;
+    const tr = s.train || {};
+    maxHp += (tr.vit || 0) * 16;
+    atk += (tr.atk || 0) * 2;
+    def += (tr.def || 0);
+    maxMp += (tr.mp || 0) * 9;
     let vision = 6 + (t.explorer || 0) + ((s.pulseVisionSteps || 0) > 0 ? 3 : 0);
     let rewardMult = 1 + (t.explorer || 0) * 0.15;
 
@@ -349,6 +356,24 @@ class StarfallEngine {
 
   // ==================== 多子區域明確步驟目標導引系統 ====================
   getCurrentObjective() {
+    const obj = this._baseObjective();
+    const s = this.state;
+    if (s.inAbyss || !obj) return obj;
+    if (/^(首領決戰|最終決戰)/.test(obj.text) && !this.isChapterGateOpen(s.chapter)) {
+      const g = this.getChapterGate(s.chapter);
+      return {
+        x: 2, y: 2, gate: true,
+        step: `章節認證 ${g.done}/${g.need}`,
+        text: `公會認證：先完成 ${g.need} 件獵人公會委託（目前 ${g.done}/${g.need}）${g.eliteOk ? "" : `並討伐${g.elite ? `${g.elite.name}（${s.chapter}-${g.elite.zone} 區 (${g.elite.x},${g.elite.y})）` : "本章菁英"}`}，才能挑戰本章首領！`,
+        sub: "點右側【委託板】接取委託：狩獵魔物、剝取素材都算；菁英討伐是必要委託。魔物在營火休息後會重生。"
+      };
+    }
+    const ready = this.getBoardQuests().filter(q => q.ready && !q.completed).length;
+    if (ready > 0) obj.sub = `委託板有 ${ready} 件委託可以領取獎勵！ ` + (obj.sub || "");
+    return obj;
+  }
+
+  _baseObjective() {
     const s = this.state;
     const ch = s.chapter;
     const z = s.subZone || 1;
@@ -1603,7 +1628,7 @@ class StarfallEngine {
     });
   }
 
-  loadZone(subZone = 1, targetX = null, targetY = null, isChapterInit = false) {
+  loadZone(subZone = 1, targetX = null, targetY = null, isChapterInit = false, silent = false) {
     const chapterNum = this.state.chapter;
     const ch = this.data.chapters[chapterNum];
     if (!ch) return;
@@ -1653,7 +1678,9 @@ class StarfallEngine {
       this.state.exploredByChapter[zKey] = {};
     }
     this.updateFogOfWar();
-    if (isChapterInit) {
+    if (silent) {
+      // 營火休息重生魔物：不輸出區域移動訊息
+    } else if (isChapterInit) {
       this.log(`[章節開始] 進入【${ch.name} — ${zObj.name || ""}】— ${zObj.ambientDesc || ch.ambientDesc}`, "chapter");
     } else {
       this.log(`[區域移動] 踏入【${chapterNum}-${subZone}：${zObj.name || ch.name}】— ${zObj.ambientDesc || ""}`, "chapter");
@@ -1998,6 +2025,14 @@ class StarfallEngine {
       return { moved: false, reason: "interacted" };
     }
 
+    if (tile === "B" && ev && !this.state.inAbyss && !this.isChapterGateOpen(this.state.chapter)) {
+      const g = this.getChapterGate(this.state.chapter);
+      const msg = `獵人公會尚未認證你：還需完成委託 ${g.done}/${g.need}${g.eliteOk ? "" : "，並討伐菁英"}（點右側【委託板】）`;
+      this.log(`[首領封印] ${msg}`, "warn");
+      if (typeof window !== "undefined" && window.gameUI) window.gameUI.showToast(msg, "warn");
+      return { moved: false, reason: "gate_locked" };
+    }
+
     if ((tile === "E" || tile === "B") && ev) {
       this.startCombat(ev, coord, { x: nx, y: ny });
       return { moved: false, reason: "combat_started" };
@@ -2166,6 +2201,123 @@ class StarfallEngine {
   }
 
   // 檢查支線任務進度與是否達成條件
+  // ==================== 獵人公會委託板 ====================
+  getBoardState() {
+    if (!this.state.board) this.state.board = { prog: {}, done: [] };
+    return this.state.board;
+  }
+
+  getBoardProgress(q) {
+    const st = this.state, b = this.getBoardState();
+    const r = q.req;
+    let cur = 0;
+    if (r.type === "kill") cur = b.prog[q.id] || 0;
+    else if (r.type === "item") cur = st.inventory[r.item] || 0;
+    else if (r.type === "flag") cur = st.flags[r.flag] ? 1 : 0;
+    else if (r.type === "level") cur = st.level;
+    else if (r.type === "stat") cur = (st.stats && st.stats[r.stat]) || 0;
+    else if (r.type === "abyss") cur = st.maxAbyssFloor || 0;
+    const target = r.type === "flag" ? 1 : r.count;
+    cur = Math.min(cur, target);
+    return { cur, target, ready: cur >= target };
+  }
+
+  // 目前已解鎖的委託（章節 <= 目前章節），含進度與完成狀態
+  getBoardQuests() {
+    const b = this.getBoardState();
+    return (this.data.boardQuests || [])
+      .filter(q => q.chapter <= this.state.chapter)
+      .map(q => Object.assign({ quest: q, completed: b.done.includes(q.id) }, this.getBoardProgress(q), { id: q.id, chapter: q.chapter }));
+  }
+
+  claimBoardQuest(id) {
+    const q = (this.data.boardQuests || []).find(x => x.id === id);
+    const b = this.getBoardState();
+    if (!q || q.chapter > this.state.chapter) return { ok: false, msg: "委託不存在" };
+    if (b.done.includes(id)) return { ok: false, msg: "這件委託已經完成" };
+    const p = this.getBoardProgress(q);
+    if (!p.ready) return { ok: false, msg: `尚未達成（${p.cur}/${p.target}）` };
+    if (q.req.type === "item" && q.req.consume) {
+      this.state.inventory[q.req.item] -= q.req.count;
+      if (this.state.inventory[q.req.item] <= 0) delete this.state.inventory[q.req.item];
+    }
+    b.done.push(id);
+    const rw = q.reward, parts = [];
+    if (rw.gold) { this.state.gold += rw.gold; parts.push(`${rw.gold}G`); }
+    if (rw.sp) { this.state.skillPoints += rw.sp; parts.push(`+${rw.sp}SP`); }
+    if (rw.items) Object.entries(rw.items).forEach(([iid, n]) => { this.addItem(iid, n); parts.push(`${this.data.items[iid] ? this.data.items[iid].name : iid}x${n}`); });
+    if (rw.exp) { this.state.exp += rw.exp; parts.push(`${rw.exp}EXP`); this._levelUpFromExp(); }
+    this.recalcStats(false);
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("levelup");
+    this.log(`[公會委託] 完成【${q.title}】！獲得 ${parts.join("、")}。`, "achievement");
+    this.checkMilestoneAchievements();
+    return { ok: true, quest: q, text: parts.join("、") };
+  }
+
+  _levelUpFromExp() {
+    while (this.state.exp >= this.state.maxExp) {
+      this.state.exp -= this.state.maxExp;
+      this.state.level++;
+      this.state.maxExp = Math.round(this.state.maxExp * 1.35);
+      this.state.skillPoints += 1;
+    }
+  }
+
+  // 擊敗魔物時累計「獵殺」類委託
+  _boardOnKill(enemyId) {
+    const b = this.getBoardState();
+    (this.data.boardQuests || []).forEach(q => {
+      if (q.req.type !== "kill" || q.chapter > this.state.chapter || b.done.includes(q.id)) return;
+      if (q.req.enemy === "any" || q.req.enemy === enemyId) b.prog[q.id] = Math.min(q.req.count, (b.prog[q.id] || 0) + 1);
+    });
+  }
+
+  getChapterGate(ch) {
+    const need = (this.data.chapterGate && this.data.chapterGate[ch]) || 0;
+    const b = this.getBoardState();
+    const list = (this.data.boardQuests || []).filter(q => q.chapter === ch);
+    const done = list.filter(q => b.done.includes(q.id)).length;
+    const eq = list.find(q => q.req.type === "flag");
+    const eliteOk = !eq || b.done.includes(eq.id);
+    let elite = null;
+    if (eq && !eliteOk) {
+      const chap = this.data.chapters[ch];
+      for (const [z, zo] of Object.entries((chap && chap.zones) || {})) {
+        for (const [coord, ev] of Object.entries(zo.events || {})) {
+          if (ev.winFlag === eq.req.flag) { const [x, y] = coord.split(",").map(Number); elite = { zone: Number(z), x, y, name: this.data.enemies[ev.enemyId] ? this.data.enemies[ev.enemyId].name : "菁英" }; }
+        }
+      }
+    }
+    return { need, done: Math.min(done, need), eliteOk, elite };
+  }
+
+  isChapterGateOpen(ch) {
+    const g = this.getChapterGate(ch);
+    return g.done >= g.need && g.eliteOk;
+  }
+
+  // ==================== 公會訓練場（金幣用途） ====================
+  getTrainCost(track) {
+    const rank = (this.state.train && this.state.train[track.id]) || 0;
+    return track.base + track.step * rank;
+  }
+
+  buyTraining(id) {
+    const track = (this.data.trainingTracks || []).find(t => t.id === id);
+    if (!track) return { ok: false, msg: "沒有這項訓練" };
+    if (!this.state.train) this.state.train = {};
+    const rank = this.state.train[id] || 0;
+    if (rank >= track.max) return { ok: false, msg: "已達訓練上限" };
+    const cost = this.getTrainCost(track);
+    if (this.state.gold < cost) return { ok: false, msg: `金幣不足（需要 ${cost} G）` };
+    this.state.gold -= cost;
+    this.state.train[id] = rank + 1;
+    this.recalcStats(false);
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("coin");
+    this.log(`[公會訓練] 【${track.name}】提升到第 ${rank + 1} 階（-${cost} G）。`, "success");
+    return { ok: true, track, rank: rank + 1 };
+  }
+
   getSideQuestProgress(questId) {
     if (!this.data.sideQuests || !this.data.sideQuests[questId]) return null;
     const sq = this.data.sideQuests[questId];
@@ -2198,7 +2350,8 @@ class StarfallEngine {
       this.state.sharpness = 100;
       this.saveGame(0);
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
-      this.log("[營火休息] 生命值、星力與武器斬味已完全恢復，並完成了自動存檔（可按 [G] 享用貓飯）。", "success");
+      this.log("[營火休息] 生命值、星力與武器斬味已完全恢復，並完成了自動存檔（可按 [G] 享用貓飯）。魔物也在林間重新出沒了。", "success");
+      if (!this.state.inAbyss) this.loadZone(this.state.subZone || 1, x, y, false, true);
       if (typeof window !== "undefined" && window.gameUI) {
         window.gameUI.showToast("[營火休憩] HP/MP/紫斬 全滿 & 已自動存檔 (按 [G] 貓飯)", "teal");
         if (window.gameUI.addMapFloatText) window.gameUI.addMapFloatText(x, y, "HP/MP/紫斬 全滿!", "#4ade80");
@@ -2269,6 +2422,8 @@ class StarfallEngine {
             dialogueLines.push(`【支線委託已完成：${sq.title}】「再次感謝你的鼎力相助，願星光永遠庇佑你的旅途！」`);
           } else if (sqStatus.ready) {
             if (!this.state.completedSideQuests) this.state.completedSideQuests = [];
+    if (!this.state.board) this.state.board = { prog: {}, done: [] };
+    if (!this.state.train) this.state.train = {};
             this.state.completedSideQuests.push(sq.id);
             if (sq.reqType === "item" && sq.consumeItem) {
               this.state.inventory[sq.reqItem] -= sq.reqCount;
@@ -2636,6 +2791,7 @@ class StarfallEngine {
   buyShopItem(itemId) {
     const entry = this.data.shopCatalog.find(s => s.itemId === itemId);
     if (!entry) return { ok: false, msg: "商品不存在" };
+    if (entry.minChapter && this.state.chapter < entry.minChapter) return { ok: false, msg: "商人尚未進這批貨（需進行到第 " + entry.minChapter + " 章）" };
     if (this.state.gold < entry.price) {
       return { ok: false, msg: "金幣不足！" };
     }
@@ -2968,6 +3124,12 @@ class StarfallEngine {
   startCombat(ev, coord) {
     const template = this.data.enemies[ev.enemyId];
     if (!template) return;
+    if (template.isBoss && !this.state.inAbyss && !this.isChapterGateOpen(this.state.chapter)) {
+      const g = this.getChapterGate(this.state.chapter);
+      const msg = `獵人公會尚未認證你：還需完成委託 ${g.done}/${g.need}${g.eliteOk ? "" : "，並討伐菁英"}（點右側【委託板】）`;
+      if (typeof window !== "undefined" && window.gameUI) window.gameUI.showToast(msg, "warn");
+      return;
+    }
 
     // 星淵樓層放大：基礎倍率再以 3 倍斜率加成血量與攻擊，終局角色才會感到壓力
     const scale = ev.abyssScale ? 1 + (ev.abyssScale - 1) * 3 : 1.0;
@@ -2975,7 +3137,7 @@ class StarfallEngine {
     // 即時戰鬥中玩家出手頻率遠高於原回合制 (約 4~5 倍)，魔物生命以 RT_HP_MULT 倍補償，使一般魔物約 8~12 秒可擊倒
     const typeMult = template.isBoss ? 2.2 : template.isElite ? 1.5 : 1.8; // 首領/精英耐打，避免被技能連段秒殺
     const amod = abyssModOf(ev.abyssMod);
-    const chMult = 1 + ((template.chapter || 1) - 1) * 0.9; // 後期章節血量加成：玩家攻擊成長遠快於魔物血量
+    const chMult = 1 + ((template.chapter || 1) - 1) * 0.35; // 後期章節血量加成：玩家攻擊成長遠快於魔物血量
     const maxHp = Math.round(template.hp * scale * RT_HP_MULT * typeMult * chMult * (amod && amod.hp ? amod.hp : 1));
     const elemNames = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
     const weakText = (template.weaknesses || []).map(w => elemNames[w] || w).join(" / ");
@@ -3484,7 +3646,10 @@ class StarfallEngine {
     const template = this.data.enemies[c.enemyId];
     const comp = this.getComputedStats();
 
-    const expGain = Math.round(template.exp * comp.rewardMult);
+    // 等級遠高於該章建議等級時經驗遞減，避免無腦刷怪
+    const recLv = 3 + (template.chapter || 1) * 2.5;
+    const expDecay = c.abyssScale ? 1 : Math.max(0.15, Math.min(1, 1 - 0.12 * (this.state.level - recLv - 2)));
+    const expGain = Math.max(1, Math.round(template.exp * comp.rewardMult * expDecay));
     const wmod = abyssModOf(c.abyssMod);
     const goldGain = Math.round(template.gold * comp.rewardMult * (wmod && wmod.gold ? wmod.gold : 1));
     this.state.exp += expGain;
@@ -3492,6 +3657,7 @@ class StarfallEngine {
     this.state.stats.battlesWon++;
     if (!this.state.bestiaryKills) this.state.bestiaryKills = {};
     this.state.bestiaryKills[c.enemyId] = (this.state.bestiaryKills[c.enemyId] || 0) + 1;
+    this._boardOnKill(c.enemyId);
 
     const dropsWon = [];
     if (template.drops) {
@@ -3554,7 +3720,8 @@ class StarfallEngine {
     if (this.activeMap[cy] && this.activeMap[cy][cx]) {
       this.activeMap[cy][cx] = ".";
     }
-    this.markEventCompleted(c.coord);
+    // 一般魔物不永久消失：重新進入區域或在營火休息後會重生（精英、首領、帶旗標者除外）
+    if (c.isBoss || c.isElite || c.eventObj.winFlag) this.markEventCompleted(c.coord);
 
     if (c.eventObj.winFlag) {
       this.state.flags[c.eventObj.winFlag] = true;

@@ -469,6 +469,10 @@ function runTests() {
       assert.ok(dd.items[r.result], "配方成品應存在：" + r.result);
       Object.keys(r.ingredients).forEach(id => assert.ok(dd.items[id], "配方素材應存在：" + id));
     });
+    // 首領認證門：未完成委託時無法開戰；補滿委託後才可開戰
+    cg.startCombat({ enemyId: "boss_thorn_behemoth" }, coord);
+    assert.ok(!cg.combat, "未完成公會認證不能挑戰首領");
+    dd.boardQuests.filter(q => q.chapter === 1).forEach(q => cg.getBoardState().done.push(q.id));
     cg.startCombat({ enemyId: "boss_thorn_behemoth" }, coord);
     cg.combat.parts.head.broken = true;
     cg.combat.parts.body.broken = true;
@@ -522,7 +526,65 @@ function runTests() {
     console.log("[PASS] Test 12: 無盡星淵（進出/詞綴/里程碑起點/層主獎勵）驗證通過");
   }
 
-  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 12 大自動化測試 100% 通過！ ===");
+  // Test 13: 公會委託板、章節認證、魔物重生、訓練場、高階補給
+  {
+    const bg = new StarfallEngine(global.window.GAME_DATA);
+    const dd = global.window.GAME_DATA;
+    assert.ok(dd.boardQuests.length >= 40, "委託板應有 40 件以上委託");
+    assert.strictEqual(bg.getChapterGate(1).need, 6);
+    assert.ok(bg.getChapterGate(1).elite && bg.getChapterGate(1).elite.zone === 2, "認證需討伐 1-2 的菁英");
+    assert.ok(!bg.isChapterGateOpen(1), "初始未通過認證");
+    const objGate = (() => { bg.state.flags.ch1_boss_defeated = false; return bg.getCurrentObjective(); })();
+    assert.ok(objGate, "應有目標");
+    // 獵殺委託：擊敗魔物累計進度，達標後可領獎
+    const kq = dd.boardQuests.find(q => q.id === "bq1_kA");
+    for (let i = 0; i < kq.req.count; i++) {
+      bg.startCombat({ enemyId: "mist_wolf" }, "5,5");
+      bg.winCombat();
+    }
+    const gold0 = bg.state.gold;
+    const res = bg.claimBoardQuest("bq1_kA");
+    assert.ok(res.ok && bg.state.gold > gold0, "獵殺達標應可領取獎勵");
+    assert.ok(!bg.claimBoardQuest("bq1_kA").ok, "不可重複領取");
+    assert.ok(!bg.claimBoardQuest("bq1_lv").ok, "等級未達不可領取");
+    assert.strictEqual(bg.getChapterGate(1).done, 1);
+    // 未解鎖章節的委託不能領
+    assert.ok(!bg.claimBoardQuest("bq2_kA").ok, "未到章節的委託不可領");
+    // 認證門：委託數達標但未討伐菁英仍不通過
+    dd.boardQuests.filter(q => q.chapter === 1 && q.req.type !== "flag").slice(0, 6).forEach(q => { const b = bg.getBoardState(); if (!b.done.includes(q.id)) b.done.push(q.id); });
+    assert.ok(!bg.isChapterGateOpen(1), "未討伐菁英不可通過認證");
+    bg.state.flags.elite_fenrir_defeated = true;
+    assert.ok(bg.claimBoardQuest("bq1_elite").ok);
+    assert.ok(bg.isChapterGateOpen(1), "委託與菁英都完成後通過認證");
+    // 一般魔物不永久消失（重進區域後重生）
+    const e0 = Object.entries(bg.activeEvents).find(([c, ev]) => ev.type === "enemy" && !ev.winFlag && dd.enemies[ev.enemyId] && !dd.enemies[ev.enemyId].isElite);
+    assert.ok(e0, "區域內應有一般魔物");
+    bg.startCombat(e0[1], e0[0]);
+    bg.winCombat();
+    const [rx, ry] = e0[0].split(",").map(Number);
+    assert.strictEqual(bg.activeMap[ry][rx], ".", "擊敗後該格清空");
+    bg.loadZone(1, bg.state.x, bg.state.y, false, true);
+    assert.strictEqual(bg.activeMap[ry][rx], "E", "重新載入區域後一般魔物重生");
+    // 訓練場
+    bg.state.gold = 100000;
+    const hp0 = bg.getComputedStats().maxHp, atk0 = bg.getComputedStats().atk;
+    assert.ok(bg.buyTraining("vit").ok && bg.buyTraining("atk").ok);
+    assert.strictEqual(bg.getComputedStats().maxHp, hp0 + 16, "體魄 +16 生命");
+    assert.strictEqual(bg.getComputedStats().atk, atk0 + 2, "武藝 +2 攻擊");
+    for (let i = 0; i < 20; i++) bg.buyTraining("vit");
+    assert.ok(!bg.buyTraining("vit").ok, "訓練有階數上限");
+    assert.strictEqual(bg.state.train.vit, 10);
+    // 高階補給存在於商店
+    assert.ok(dd.shopCatalog.some(e => e.itemId === "grand_potion" && e.minChapter === 2));
+    // 存檔往返保留委託與訓練
+    const raw = bg.serialize();
+    const bg2 = new StarfallEngine(dd);
+    bg2.deserialize(raw);
+    assert.ok(bg2.getBoardState().done.includes("bq1_kA") && bg2.state.train.vit === 10);
+    console.log("[PASS] Test 13: 公會委託板、章節認證、魔物重生、訓練場與高階補給驗證通過");
+  }
+
+  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 13 大自動化測試 100% 通過！ ===");
 }
 
 runTests();
