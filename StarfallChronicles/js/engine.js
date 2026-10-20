@@ -3210,6 +3210,7 @@ class StarfallEngine {
       }
       rt.cd[skillId] = this.rtSkillCd(sk);
       rt.gcd = 0.45;
+      if (sk.type !== "defense" && sk.type !== "heal") rt.lockT = sk.type === "ultimate" ? 0.5 : sk.id === "slash" ? 0.15 : 0.3;
     }
 
     const comp = this.getComputedStats();
@@ -3372,6 +3373,7 @@ class StarfallEngine {
         rt.comboT = 3;
         rt.comboBest = Math.max(rt.comboBest || 0, rt.combo);
         rt.freeze = Math.max(rt.freeze || 0, isCrit || brokeNow || partBreakTag ? 0.12 : 0.05);
+        this.rtTryFlinch(sk, !!partBreakTag);
       }
       this.combat.fx = {
         text: `${comboName ? `[${comboName}] ` : ""}${isWeakness ? "WEAK! " : ""}${isCrit ? "CRIT " : ""}-${dmg}${brokeNow ? " BREAK!" : ""}${partBreakTag}`,
@@ -3446,6 +3448,33 @@ class StarfallEngine {
           if (itemObj) dropsWon.push(itemObj.name);
         }
       });
+    }
+
+    // 剝取魔物素材：破壞部位必得對應素材，另依魔物等級額外剝取 2~4 次 (皮革 55% / 利牙 35% / 稀有核心 10%，首領精英 18%)
+    const carved = [];
+    if (template.carve) {
+      const giveCarve = (id, n = 1) => {
+        this.addItem(id, n);
+        const it = this.data.items[id];
+        carved.push(it ? it.name : id);
+      };
+      const pt = c.parts || {};
+      if (pt.head && pt.head.broken) giveCarve(template.carve.fang);
+      if (pt.body && pt.body.broken) giveCarve(template.carve.hide);
+      if (pt.tail && pt.tail.broken) giveCarve(template.carve.core);
+      const coreRate = c.isBoss || c.isElite ? 0.18 : 0.1;
+      const rolls = c.isBoss ? 4 : c.isElite ? 3 : 2;
+      for (let i = 0; i < rolls; i++) {
+        const r = Math.random();
+        giveCarve(r < coreRate ? template.carve.core : r < coreRate + 0.35 ? template.carve.fang : template.carve.hide);
+      }
+      if (carved.length) {
+        const sum = {};
+        carved.forEach(n => (sum[n] = (sum[n] || 0) + 1));
+        const parts = Object.entries(sum).map(([n, k]) => `${n} x${k}`);
+        this.log(`[剝取素材] 從【${c.name}】身上剝取：${parts.join("、")}。`, "success");
+        parts.forEach(x => dropsWon.push(x));
+      }
     }
 
     const [cx, cy] = c.coord.split(",").map(Number);

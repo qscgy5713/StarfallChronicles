@@ -110,8 +110,8 @@ function runTests() {
   // Test 4: 驗證元素屬性弱點破盾 (+1 額外破盾與 1.25x 弱點傷害)
   game.startCombat({ enemyId: "corrupted_treant" }, "4,3");
   assert.ok(game.combat, "應進入腐化古樹精戰鬥");
-  game.combat.enemyHp = 350;
-  game.combat.enemyMaxHp = 350;
+  game.combat.enemyHp = 3500;
+  game.combat.enemyMaxHp = 3500;
   if (game.combat.parts) {
     game.combat.parts.body.hp = 200;
     game.combat.parts.body.maxHp = 200;
@@ -442,6 +442,43 @@ function runTests() {
     rg2.state.gold = 200;
     rg2.loseCombat();
     assert.strictEqual(rg2.state.gold, 170, "戰敗應損失 15% 金幣");
+    // 打斷 / 疲憊 / 出招硬直
+    const fg = new StarfallEngine(global.window.GAME_DATA);
+    fg.state.mp = 85;
+    fg.startCombat({ enemyId: "mist_wolf" }, coord);
+    ready(fg);
+    const frt = fg.combat.rt;
+    frt.m.state = "windup"; frt.m.t = 1; frt.m.windupMax = 1; frt.m.zone = { shape: "circle", x: fg.state.x, y: fg.state.y, r: 2 };
+    assert.ok(fg.executeSkill("star_bolt").ok, "墜星矢應可施放");
+    assert.strictEqual(frt.m.state, "recover", "耗魔重擊應打斷前搖中的一般魔物");
+    assert.ok(frt.flinchCd > 0 && !frt.m.zone, "打斷後應進入冷卻並清除預警範圍");
+    assert.ok(frt.lockT > 0, "出招後應有短暫硬直");
+    const lx = fg.state.x;
+    assert.strictEqual(fg.rtMove(-1, 0).moved, false, "出招硬直中不可走位");
+    assert.strictEqual(fg.state.x, lx);
+    fg.combat.enemyHp = Math.floor(fg.combat.enemyMaxHp * 0.2);
+    frt.freeze = 0;
+    fg.rtUpdate(0.05);
+    assert.ok(frt.tiredShown, "生命低於 25% 應進入疲憊");
+    // 剝取素材與狩獵裝備
+    const cg = new StarfallEngine(global.window.GAME_DATA);
+    const dd = global.window.GAME_DATA;
+    assert.ok(dd.items.mist_wolf_hide && dd.items.boss_chronos_core && dd.enemies.mist_wolf.carve, "每種魔物應衍生三種素材");
+    assert.ok(dd.recipes.filter(r => r.group === "monster").length === 15, "應有 5 首領武器 + 5 首領防具 + 5 精英聖物配方");
+    dd.recipes.filter(r => r.group === "monster").forEach(r => {
+      assert.ok(dd.items[r.result], "配方成品應存在：" + r.result);
+      Object.keys(r.ingredients).forEach(id => assert.ok(dd.items[id], "配方素材應存在：" + id));
+    });
+    cg.startCombat({ enemyId: "boss_thorn_behemoth" }, coord);
+    cg.combat.parts.head.broken = true;
+    cg.combat.parts.body.broken = true;
+    cg.combat.parts.tail.broken = true;
+    cg.winCombat();
+    const inv = cg.state.inventory;
+    assert.ok((inv.boss_thorn_behemoth_fang || 0) >= 1 && (inv.boss_thorn_behemoth_hide || 0) >= 1 && (inv.boss_thorn_behemoth_core || 0) >= 1, "破壞三個部位應必得對應素材");
+    cg.state.gold = 1000;
+    inv.boss_thorn_behemoth_fang = 3; inv.boss_thorn_behemoth_hide = 1; inv.boss_thorn_behemoth_core = 1;
+    assert.ok(cg.craftRecipe("craft_boss_thorn_behemoth_blade").ok, "素材足夠應可鍛造首領獵刃");
     console.log("[PASS] Test 11: 即時戰鬥（追擊/預警範圍/冷卻/距離/翻滾無敵/撤退）驗證通過");
   }
 

@@ -90,6 +90,34 @@ const StarfallRT = {
     if (c.pops.length > 24) c.pops.shift();
   },
 
+  // 打斷 (Flinch)：重擊命中出招前搖中的魔物 → 取消該次攻擊、後退一格並硬直，首領只會被破部位/奧義打斷
+  rtTryFlinch(sk, heavyHit) {
+    const c = this.combat;
+    const rt = c && c.rt;
+    if (!rt || rt.flinchCd > 0) return false;
+    const m = rt.m;
+    if (m.state !== "windup" || m.t < 0.2) return false;
+    const strong = heavyHit || sk.type === "ultimate";
+    const breaks = c.isBoss ? strong : strong || (sk.mpCost || 0) > 0;
+    if (!breaks) return false;
+    m.state = "recover";
+    m.t = c.isBoss ? 0.9 : 1.3;
+    m.zone = null;
+    m.proj = false;
+    m.rush = false;
+    rt.flinchCd = 2.5;
+    const dx = Math.sign(rt.mx - this.state.x);
+    const dy = Math.sign(rt.my - this.state.y);
+    const nx = rt.mx + dx, ny = rt.my + dy;
+    if ((dx || dy) && this.rtWalkable(nx, ny) && !(nx === this.state.x && ny === this.state.y)) {
+      rt.mx = nx;
+      rt.my = ny;
+    }
+    this.rtPop("打斷！", "#38bdf8", "enemy", true);
+    c.log.push(`[打斷] 你的重擊打斷了 ${c.name} 的攻擊，牠踉蹌後退！`);
+    return true;
+  },
+
   rtHeroDist() {
     const rt = this.combat.rt;
     return this.rtDist(this.state.x, this.state.y, rt.mx, rt.my);
@@ -124,7 +152,7 @@ const StarfallRT = {
     if (!c || !c.rt) return { moved: false };
     const rt = c.rt;
     if (dx || dy) { rt.dirX = dx; rt.dirY = dy; }
-    if (rt.moveCd > 0) return { moved: false };
+    if (rt.moveCd > 0 || rt.lockT > 0) return { moved: false };
     const nx = this.state.x + dx;
     const ny = this.state.y + dy;
     if (!this.rtWalkable(nx, ny) || (nx === rt.mx && ny === rt.my)) return { moved: false };
@@ -387,7 +415,14 @@ const StarfallRT = {
     const c = this.combat;
     const rt = c.rt;
     const m = rt.m;
-    const speed = c.enraged ? 0.8 : 1;
+    // 瀕死疲憊：生命低於 25% 動作遲緩 (行動間隔 +25%)，給玩家收尾的空檔
+    const tired = c.enemyHp < c.enemyMaxHp * 0.25;
+    if (tired && !rt.tiredShown) {
+      rt.tiredShown = true;
+      this.rtPop("疲憊", "#fbbf24", "enemy", true);
+      c.log.push(`[疲憊] ${c.name} 氣喘吁吁、動作變得遲緩，正是收尾的好時機！`);
+    }
+    const speed = (c.enraged ? 0.8 : 1) * (tired ? 1.25 : 1);
 
     if (c.brokenThisTurn || rt.stunT > 0) {
       m.state = "stun";
@@ -474,7 +509,7 @@ const StarfallRT = {
       rt.comboT -= dt;
       if (rt.comboT <= 0) rt.combo = 0;
     }
-    for (const k of ["gcd", "moveCd", "dodgeCd", "potionCd", "sharpenCd", "ivT", "guardT"]) {
+    for (const k of ["gcd", "moveCd", "dodgeCd", "potionCd", "sharpenCd", "ivT", "guardT", "flinchCd", "lockT"]) {
       if (rt[k] > 0) rt[k] = Math.max(0, rt[k] - dt);
     }
     for (const k of Object.keys(rt.cd)) {

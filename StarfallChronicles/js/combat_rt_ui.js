@@ -177,6 +177,11 @@ const GameUIRT = {
     this._setHtml($("rt-strip"), strip.join(" "));
 
     this.updateRtTip(c);
+    const bn = $("rt-banner");
+    if (bn) {
+      const big = c.isBoss || c.isElite;
+      this._setHtml(bn, big && c.rt.elapsed < 2.6 ? `<small>${c.isBoss ? "首領狩獵" : "精英狩獵"}</small><b>${c.name}</b>` : "");
+    }
 
     const comboEl = $("rt-combo");
     if (comboEl) {

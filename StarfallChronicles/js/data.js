@@ -3008,6 +3008,50 @@ Object.values(GAME_DATA.chapters).forEach(ch => {
   }
 });
 
+// ==================== 魔物素材與獵人裝備 (剝取 → 鍛造) ====================
+// 每種魔物自動衍生三種素材：皮革(軀幹破壞必得)、利牙(頭部破壞必得)、稀有核心(斷尾必得)。
+// 首領素材鍛造專屬武器與防具，精英素材鍛造聖物；魔物圖鑑有討伐紀錄或持有素材後配方才會出現。
+(function buildMonsterGear(D) {
+  const shortName = n => n.replace(/【.*?】/g, "").split("・")[0];
+  const bossGear = {
+    boss_thorn_behemoth: { atk: 24, crit: 6, def: 10, hp: 40 },
+    boss_chronos: { atk: 32, crit: 8, def: 14, hp: 60 },
+    boss_ignis: { atk: 44, crit: 10, def: 19, hp: 85 },
+    boss_astra: { atk: 56, crit: 12, def: 25, hp: 110 },
+    boss_moebius: { atk: 66, crit: 14, def: 32, hp: 140 }
+  };
+  const eliteRelic = {
+    elite_fenrir: { atk: 5, crit: 5, maxMp: 15 },
+    elite_abyss_crab: { atk: 7, crit: 6, maxMp: 20 },
+    elite_vulcan: { atk: 9, crit: 7, maxMp: 28 },
+    elite_twin_inquisitor: { atk: 11, crit: 8, maxMp: 36 },
+    elite_regis: { atk: 13, crit: 9, maxMp: 45 }
+  };
+  Object.values(D.enemies).forEach(en => {
+    const ch = en.chapter || 1;
+    const sn = shortName(en.name);
+    en.carve = { hide: en.id + "_hide", fang: en.id + "_fang", core: en.id + "_core" };
+    D.items[en.carve.hide] = { id: en.carve.hide, name: sn + "皮革", icon: "icon_gear", category: "material", value: 10 + ch * 6, desc: "破壞【" + sn + "】軀幹後剝取的堅韌皮革。" };
+    D.items[en.carve.fang] = { id: en.carve.fang, name: sn + "利牙", icon: "icon_atk", category: "material", value: 14 + ch * 8, desc: "破壞【" + sn + "】頭部後剝取的鋒利牙爪。" };
+    D.items[en.carve.core] = { id: en.carve.core, name: sn + "稀有核心", icon: "crystal", category: "material", value: 40 + ch * 20, desc: "斬斷【" + sn + "】尾巴或幸運剝取才有的稀有核心。" };
+    const bg = bossGear[en.id];
+    if (bg) {
+      const wid = en.id + "_blade";
+      const aid = en.id + "_mail";
+      D.items[wid] = { id: wid, name: sn + "獵刃", icon: "icon_atk", category: "equipment", slot: "weapon", stats: { atk: bg.atk, crit: bg.crit }, value: 120 * ch, desc: "以【" + sn + "】的素材鍛造的獵刃，帶有牠的氣息。" };
+      D.items[aid] = { id: aid, name: sn + "鎧", icon: "icon_def", category: "equipment", slot: "armor", stats: { def: bg.def, maxHp: bg.hp }, value: 110 * ch, desc: "以【" + sn + "】的皮革與利牙鍛造的重鎧。" };
+      D.recipes.push({ id: "craft_" + wid, group: "monster", source: en.id, result: wid, count: 1, costGold: 80 * ch, ingredients: { [en.carve.fang]: 3, [en.carve.hide]: 1, [en.carve.core]: 1 }, desc: "狩獵【" + sn + "】的證明：獵刃，攻擊力 +" + bg.atk + "。" });
+      D.recipes.push({ id: "craft_" + aid, group: "monster", source: en.id, result: aid, count: 1, costGold: 70 * ch, ingredients: { [en.carve.hide]: 3, [en.carve.fang]: 1, [en.carve.core]: 1 }, desc: "狩獵【" + sn + "】的證明：重鎧，防禦 +" + bg.def + "、生命 +" + bg.hp + "。" });
+    }
+    const er = eliteRelic[en.id];
+    if (er) {
+      const rid = en.id + "_charm";
+      D.items[rid] = { id: rid, name: sn + "護符", icon: "crystal", category: "equipment", slot: "relic", stats: er, value: 90 * ch, desc: "以精英【" + sn + "】的素材製成的護符。" };
+      D.recipes.push({ id: "craft_" + rid, group: "monster", source: en.id, result: rid, count: 1, costGold: 60 * ch, ingredients: { [en.carve.fang]: 2, [en.carve.hide]: 2, [en.carve.core]: 1 }, desc: "精英【" + sn + "】的戰利護符。" });
+    }
+  });
+})(GAME_DATA);
+
 if (typeof window !== "undefined") {
   window.GAME_DATA = GAME_DATA;
 }

@@ -1999,7 +1999,11 @@ class GameUI {
       </div>
     `;
 
-    const recipesHtml = `<div class="craft-title">合成與鍛造 <small>持有金幣 ${s.gold} G</small></div><div class="recipe-grid">${this.engine.data.recipes
+    const visibleRc = rc =>
+      !rc.group ||
+      (s.bestiaryKills && s.bestiaryKills[rc.source] > 0) ||
+      Object.keys(rc.ingredients).some(id => (s.inventory[id] || 0) > 0);
+    const renderRc = list => list
       .map(rc => {
         const resItem = this.engine.data.items[rc.result];
         const ok = !lacks(rc.ingredients, rc.costGold);
@@ -2016,7 +2020,17 @@ class GameUI {
           </div>
         `;
       })
-      .join("")}</div>`;
+      .join("");
+
+    const allRc = this.engine.data.recipes;
+    const basicRc = allRc.filter(rc => !rc.group);
+    const monsterRc = allRc.filter(rc => rc.group === "monster" && visibleRc(rc));
+    const recipesHtml =
+      `<div class="craft-title">合成與鍛造 <small>持有金幣 ${s.gold} G</small></div><div class="recipe-grid">${renderRc(basicRc)}</div>` +
+      `<div class="craft-title" style="margin-top:18px;">狩獵裝備 <small>討伐魔物並破壞部位剝取素材，首領做武器與防具、精英做聖物</small></div>` +
+      (monsterRc.length
+        ? `<div class="recipe-grid">${renderRc(monsterRc)}</div>`
+        : `<div class="inv-card locked-card"><div class="inv-card-desc">尚無可鍛造的狩獵裝備。討伐魔物後，破壞頭部取得利牙、破壞軀幹取得皮革、斬斷尾巴取得稀有核心。</div></div>`);
 
     box.innerHTML = upgradeHtml + recipesHtml;
   }
