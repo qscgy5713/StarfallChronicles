@@ -1399,3 +1399,18 @@ body.in-combat .rt-log { display: flex; flex-direction: column; align-items: cen
 .rt-combo b { font-size: 34px; color: #facc15; margin-right: 4px; }
 body.in-combat .rt-combo:not(:empty) { display: block; animation: comboPop .18s ease-out; }
 @keyframes comboPop { from { transform: scale(1.5); } to { transform: scale(1); } }
+
+/* 首次戰鬥引導提示 */
+.rt-tip { display: none; position: absolute; left: 50%; bottom: 122px; transform: translateX(-50%); max-width: min(640px, 80%); padding: 8px 16px; border-radius: 10px; background: rgba(6, 40, 52, 0.9); border: 1px solid #2dd4bf; color: #ccfbf1; font-size: 13px; font-weight: 700; text-align: center; line-height: 1.5; pointer-events: none; }
+body.in-combat .rt-tip:not(:empty) { display: block; }
+
+/* 戰鬥結算卡 */
+.battle-summary { position: absolute; left: 50%; top: 22%; transform: translate(-50%, -12px); min-width: 280px; padding: 12px 18px; border-radius: 12px; background: rgba(8, 12, 22, 0.92); border: 1px solid #facc15; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); color: #e2e8f0; opacity: 0; pointer-events: none; transition: opacity .3s, transform .3s; z-index: 5; }
+.battle-summary.show { opacity: 1; transform: translate(-50%, 0); }
+.bs-head { display: flex; justify-content: space-between; align-items: center; color: #facc15; font-weight: 800; font-size: 15px; }
+.bs-rank { font-size: 22px; color: #fde68a; text-shadow: 0 0 8px rgba(250, 204, 21, 0.7); }
+.bs-name { font-size: 12px; color: #94a3b8; margin: 2px 0 8px; }
+.bs-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; font-size: 13px; }
+.bs-grid span { color: #94a3b8; }
+.bs-grid b { text-align: right; }
+.bs-drops { margin-top: 8px; padding-top: 6px; border-top: 1px dashed rgba(148, 163, 184, 0.3); font-size: 12px; color: #4ade80; }

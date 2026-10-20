@@ -257,6 +257,7 @@ const StarfallRT = {
       dmg -= blocked;
     }
     this.state.hp = Math.max(0, this.state.hp - dmg);
+    rt.taken = (rt.taken || 0) + dmg;
     this.state.burst = Math.min(100, this.state.burst + 12);
     rt.fleeT = 0;
     rt.combo = 0;
@@ -467,6 +468,7 @@ const StarfallRT = {
       rt.freeze -= dt;
       return;
     }
+    rt.elapsed = (rt.elapsed || 0) + dt;
     // 連擊計數：3 秒內未再命中則歸零（純顯示，不影響傷害）
     if (rt.comboT > 0) {
       rt.comboT -= dt;

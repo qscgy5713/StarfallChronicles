@@ -88,7 +88,7 @@ const GameUIRT = {
     const items = Object.entries(s.inventory)
       .map(([id, cnt]) => ({ item: this.engine.data.items[id], cnt, id }))
       .filter(x => x.item && x.item.usableInCombat && x.cnt > 0)
-      .map(x => slotHtml("", x.item.icon, x.item.name, `x${x.cnt}`, `data-item="${x.id}" onclick="window.gameUI.onUseItemClick('${x.id}')" title="${this.getShortStatSummary(x.item)}"`))
+      .map(x => slotHtml(this.quickItemKey(x.id), x.item.icon, x.item.name, `x${x.cnt}`, `data-item="${x.id}" onclick="window.gameUI.onUseItemClick('${x.id}')" title="${this.getShortStatSummary(x.item)}"`))
       .join("");
     bottom.innerHTML = `
       <div id="rt-strip" class="rt-strip"></div>
@@ -176,6 +176,8 @@ const GameUIRT = {
     });
     this._setHtml($("rt-strip"), strip.join(" "));
 
+    this.updateRtTip(c);
+
     const comboEl = $("rt-combo");
     if (comboEl) {
       const n = (c.rt && c.rt.combo) || 0;
@@ -188,6 +190,56 @@ const GameUIRT = {
       this._rtLogLen = c.log.length;
       $("rt-log").innerHTML = c.log.slice(-3).map((l, i, a) => `<div class="rt-log-line${i === a.length - 1 ? " latest" : ""}">${l}</div>`).join("");
     }
+  },
+
+  // 戰鬥結算卡：勝利後顯示用時、最高連擊、受傷量與獎勵，數秒後自動淡出
+  showBattleSummary(r) {
+    const el = document.getElementById("battle-summary");
+    if (!el) return;
+    const rank = r.taken === 0 ? "S 無傷" : r.taken < this.engine.state.maxHp * 0.25 ? "A" : r.taken < this.engine.state.maxHp * 0.6 ? "B" : "C";
+    el.innerHTML = `
+      <div class="bs-head"><span>戰鬥勝利</span><b class="bs-rank">${rank}</b></div>
+      <div class="bs-name">${r.name}</div>
+      <div class="bs-grid">
+        <span>用時</span><b>${r.time.toFixed(1)} 秒</b>
+        <span>最高連擊</span><b>${r.combo}</b>
+        <span>受到傷害</span><b>${r.taken}</b>
+        <span>獎勵</span><b>${r.exp} EXP ／ ${r.gold} G</b>
+      </div>
+      ${r.drops && r.drops.length ? `<div class="bs-drops">戰利品：${r.drops.join("、")}</div>` : ""}`;
+    el.classList.add("show");
+    clearTimeout(this._bsTimer);
+    this._bsTimer = setTimeout(() => el.classList.remove("show"), 5000);
+  },
+
+  // 首次戰鬥引導：依戰況各出現一次的情境提示 (記錄於存檔 state.tipsSeen)
+  updateRtTip(c) {
+    const el = document.getElementById("rt-tip");
+    if (!el) return;
+    const st = this.engine.state;
+    st.tipsSeen = st.tipsSeen || {};
+    const rt = c.rt;
+    let key = null;
+    let text = "";
+    if (!st.tipsSeen.start) {
+      key = "start";
+      text = "按 [1] 星芒斬（免費、回魔）與 [2] 墜星矢（耗魔、傷害高）出招；打弱點屬性可更快破盾";
+    } else if (!st.tipsSeen.telegraph && rt.m && rt.m.state === "windup") {
+      key = "telegraph";
+      text = "地上出現紅色預警圈！走出圈外，或在命中前按 [X] 翻滾閃避（翻滾瞬間無敵並反擊）";
+    } else if (!st.tipsSeen.stun && rt.stunT > 0) {
+      key = "stun";
+      text = "護盾被打破、魔物暈眩！趁現在全力輸出，暈眩中承受 1.4 倍傷害";
+    }
+    if (key && this._tipKey !== key) {
+      this._tipKey = key;
+      this._tipUntil = performance.now() + 7000;
+    }
+    if (this._tipKey && performance.now() > this._tipUntil) {
+      st.tipsSeen[this._tipKey] = true;
+      this._tipKey = null;
+    }
+    this._setHtml(el, this._tipKey ? text : "");
   },
 
   _setHtml(el, html) {
@@ -314,6 +366,19 @@ const GameUIRT = {
     sw.ticks--;
   },
 
+  // 戰鬥快捷道具：H = 回復生命（依序取治療藥水、高階靈藥、鳳凰涅槃膏）、N = 回復星力（魔力飲）
+  quickItemId(kind) {
+    const inv = this.engine.state.inventory;
+    const order = kind === "H" ? ["healing_potion", "greater_potion", "phoenix_salve"] : ["mana_elixir"];
+    return order.find(id => (inv[id] || 0) > 0) || null;
+  },
+
+  quickItemKey(itemId) {
+    if (this.quickItemId("H") === itemId) return "H";
+    if (this.quickItemId("N") === itemId) return "N";
+    return "";
+  },
+
   onUseItemClick(itemId) {
     const res = this.engine.useItem(itemId);
     if (!res.ok && res.msg) this.showToast(res.msg, "warn");
@@ -341,6 +406,11 @@ const GameUIRT = {
     else if (k === "x") this.onForesightSlashClick();
     else if (k === "f") this.onFleeClick();
     else if (k === "t") this.toggleRtAuto();
+    else if (k === "h" || k === "n") {
+      const id = this.quickItemId(k.toUpperCase());
+      if (id) this.onUseItemClick(id);
+      else this.showToast(k === "h" ? "沒有可用的回復藥水" : "沒有魔力飲", "warn");
+    }
     else if (k === "z") {
       const order = ["head", "body", "tail"];
       this.onSelectMonsterPartClick(order[(order.indexOf(c.targetPart || "body") + 1) % 3]);

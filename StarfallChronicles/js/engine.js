@@ -3509,6 +3509,17 @@ class StarfallEngine {
     );
     if (typeof window !== "undefined" && window.gameUI) {
       window.gameUI.showToast(`擊敗 ${enemyName}！+${expGain}EXP +${goldGain}G`, "gold");
+      if (c.rt && window.gameUI.showBattleSummary) {
+        window.gameUI.showBattleSummary({
+          name: enemyName,
+          time: c.rt.elapsed || 0,
+          combo: c.rt.comboBest || 0,
+          taken: c.rt.taken || 0,
+          exp: expGain,
+          gold: goldGain,
+          drops: dropsWon
+        });
+      }
       if (window.gameUI.addMapFloatText) {
         window.gameUI.addMapFloatText(this.state.x, this.state.y, `+${expGain}EXP +${goldGain}G`, "#facc15");
       }

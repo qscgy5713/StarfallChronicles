@@ -331,12 +331,12 @@ const GAME_DATA = {
       mpCost: 14,
       burstGain: 22,
       shieldBreak: 2,
-      mult: 1.45,
+      mult: 3.3,
       type: "star",
       elementLabel: "星輝",
       unlockedByDefault: true,
       costSP: 0,
-      desc: "[星輝] 凝聚星輝射出光矢。造成 145% 星輝傷害，擊碎 2 點敵方護盾。"
+      desc: "[星輝] 凝聚星輝射出光矢。造成 330% 星輝傷害，擊碎 2 點敵方護盾。"
     },
     guard: {
       id: "guard",
@@ -359,13 +359,13 @@ const GAME_DATA = {
       mpCost: 16,
       burstGain: 22,
       shieldBreak: 2,
-      mult: 1.5,
+      mult: 3.59,
       type: "physical",
       elementLabel: "物理",
       effect: { type: "vuln", turns: 2 },
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[物理] 勢大力沉的突刺。造成 150% 物理傷害，擊碎 2 點護盾並附加 4 秒【易傷】。"
+      desc: "[物理] 勢大力沉的突刺。造成 359% 物理傷害，擊碎 2 點護盾並附加 4 秒【易傷】。"
     },
     flame_cleave: {
       id: "flame_cleave",
@@ -374,13 +374,13 @@ const GAME_DATA = {
       mpCost: 18,
       burstGain: 24,
       shieldBreak: 2,
-      mult: 1.55,
+      mult: 3.88,
       type: "fire",
       elementLabel: "烈焰",
       effect: { type: "burn", turns: 3 },
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[烈焰] 纏繞矮人熔岩烈焰的重斬。造成 155% 火屬性傷害，擊碎 2 點護盾並附加 6 秒【灼燒】。"
+      desc: "[烈焰] 纏繞矮人熔岩烈焰的重斬。造成 388% 火屬性傷害，擊碎 2 點護盾並附加 6 秒【灼燒】。"
     },
     frost_nova: {
       id: "frost_nova",
@@ -389,13 +389,13 @@ const GAME_DATA = {
       mpCost: 20,
       burstGain: 22,
       shieldBreak: 2,
-      mult: 1.4,
+      mult: 4.18,
       type: "frost",
       elementLabel: "寒霜",
       effect: { type: "weaken", turns: 2 },
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[寒霜] 釋放極寒星霧。造成 140% 冰屬性傷害，擊碎 2 點護盾並令敵人【虛弱】4 秒。"
+      desc: "[寒霜] 釋放極寒星霧。造成 418% 冰屬性傷害，擊碎 2 點護盾並令敵人【虛弱】4 秒。"
     },
     starlight_mend: {
       id: "starlight_mend",
@@ -418,12 +418,12 @@ const GAME_DATA = {
       mpCost: 22,
       burstGain: 34,
       shieldBreak: 3,
-      mult: 1.7,
+      mult: 4.48,
       type: "star",
       elementLabel: "星輝",
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[星輝] 揮出滿月般璀璨的星弧。造成 170% 星輝傷害，強效擊碎 3 點護盾並累積 34% 極限星能。"
+      desc: "[星輝] 揮出滿月般璀璨的星弧。造成 448% 星輝傷害，強效擊碎 3 點護盾並累積 34% 極限星能。"
     },
     magma_eruption: {
       id: "magma_eruption",
@@ -432,13 +432,13 @@ const GAME_DATA = {
       mpCost: 25,
       burstGain: 26,
       shieldBreak: 3,
-      mult: 1.8,
+      mult: 4.95,
       type: "fire",
       elementLabel: "烈焰",
       effect: { type: "burn", turns: 3 },
       unlockedByDefault: false,
       costSP: 2,
-      desc: "[烈焰] 引爆地心星火。造成 180% 烈焰傷害並擊碎 3 點護盾；若目標已處於灼燒則額外增傷 25%。"
+      desc: "[烈焰] 引爆地心星火。造成 495% 烈焰傷害並擊碎 3 點護盾；若目標已處於灼燒則額外增傷 25%。"
     },
     glacier_lance: {
       id: "glacier_lance",
@@ -447,13 +447,13 @@ const GAME_DATA = {
       mpCost: 25,
       burstGain: 25,
       shieldBreak: 3,
-      mult: 1.75,
+      mult: 4.95,
       type: "frost",
       elementLabel: "寒霜",
       effect: { type: "weaken", turns: 3 },
       unlockedByDefault: false,
       costSP: 2,
-      desc: "[寒霜] 貫穿敵陣的極寒冰槍。造成 175% 寒霜傷害、擊碎 3 點護盾，並為自身附加 +25 寒冰護甲。"
+      desc: "[寒霜] 貫穿敵陣的極寒冰槍。造成 495% 寒霜傷害、擊碎 3 點護盾，並為自身附加 +25 寒冰護甲。"
     },
     void_pierce: {
       id: "void_pierce",
@@ -462,13 +462,13 @@ const GAME_DATA = {
       mpCost: 26,
       burstGain: 28,
       shieldBreak: 3,
-      mult: 1.85,
+      mult: 5.11,
       type: "void",
       elementLabel: "虛空",
       effect: { type: "vuln", turns: 3 },
       unlockedByDefault: false,
       costSP: 2,
-      desc: "[虛空] 撕裂空間的突刺。無視敵方 50% 防禦造成 185% 虛空傷害，擊碎 3 點護盾並附加 6 秒【易傷】。"
+      desc: "[虛空] 撕裂空間的突刺。無視敵方 50% 防禦造成 511% 虛空傷害，擊碎 3 點護盾並附加 6 秒【易傷】。"
     },
     astral_judgment: {
       id: "astral_judgment",
