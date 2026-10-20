@@ -711,10 +711,14 @@ class GameUI {
       this.camX = -Math.floor((this.logicalWidth - mapPixelW) / 2);
       this.camY = -Math.floor((this.logicalHeight - mapPixelH) / 2);
     } else {
-      const maxCamX = Math.max(0, cols * ts - this.logicalWidth);
-      const maxCamY = Math.max(0, rows * ts - this.logicalHeight);
-      const targetX = Math.max(0, Math.min(maxCamX, this.engine.state.x * ts + ts / 2 - this.logicalWidth / 2));
-      const targetY = Math.max(0, Math.min(maxCamY, this.engine.state.y * ts + ts / 2 - this.logicalHeight / 2));
+      // 鏡頭永遠以主角為中心（不再限制於地圖邊界內），地圖邊緣以外顯示為背景
+      const targetX = this.engine.state.x * ts + ts / 2 - this.logicalWidth / 2;
+      const targetY = this.engine.state.y * ts + ts / 2 - this.logicalHeight / 2;
+      if (!this._camInit) {
+        this.camX = targetX;
+        this.camY = targetY;
+        this._camInit = true;
+      }
       this.camX += (targetX - this.camX) * 0.28;
       this.camY += (targetY - this.camY) * 0.28;
       if (Math.abs(targetX - this.camX) < 0.5) this.camX = targetX;
@@ -724,7 +728,7 @@ class GameUI {
     const ox = -Math.round(this.camX);
     const oy = -Math.round(this.camY);
 
-    ctx.fillStyle = "#060911";
+    ctx.fillStyle = "#0a1410";
     ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
 
     for (let y = 0; y < rows; y++) {

@@ -1222,3 +1222,72 @@ body:has(.combat-overlay.active) .char-drawer {
 .guide-sub-row {
   display: none;
 }
+
+/* 左側 HUD 精簡：狀態縮小、任務與日誌預設收合，避免遮擋遊戲畫面 */
+.hud-float {
+  width: 206px;
+  bottom: auto;
+  opacity: 0.82;
+  transition: opacity 0.2s;
+}
+
+.hud-float:hover {
+  opacity: 1;
+}
+
+.hud-float:has(.hud-quests.open) {
+  bottom: 62px;
+  width: 252px;
+}
+
+.hud-status canvas {
+  width: 34px !important;
+  height: 34px !important;
+}
+
+.hud-status > div:first-child {
+  padding: 4px !important;
+  margin-bottom: 6px !important;
+}
+
+.hud-status .bar-label {
+  font-size: 10.5px;
+}
+
+.hud-quests {
+  flex: none;
+  max-height: 34px;
+  overflow: hidden;
+}
+
+.hud-quests.open {
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.hud-quests .panel-section-title {
+  cursor: pointer;
+  margin-bottom: 0;
+}
+
+.hud-quests .panel-section-title::after {
+  content: "▸";
+  color: #facc15;
+}
+
+.hud-quests.open .panel-section-title::after {
+  content: "▾";
+}
+
+.hud-quests.open .panel-section-title {
+  margin-bottom: 6px;
+}
+
+.hud-log {
+  display: none;
+}
+
+.hud-quests.open + .hud-log {
+  display: block;
+}
