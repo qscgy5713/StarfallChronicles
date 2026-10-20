@@ -1522,7 +1522,7 @@ class GameUI {
     let html = tasks
       .map(
         t => `<div class="quest-item ${t.done ? "done" : ""}">
-          <span style="color: ${t.done ? "#4ade80" : "#facc15"}; font-weight: 800;">[${t.done ? "完成" : "主線"}]</span>
+          <span class="q-tag ${t.done ? "done" : "main"}">${t.done ? "完成" : "主線"}</span>
           <span>${t.text}</span>
         </div>`
       )
@@ -1539,8 +1539,8 @@ class GameUI {
             const cur = prog ? prog.current : 0;
             const tgt = prog ? prog.target : 1;
             return `<div class="quest-item ${done ? "done" : ""}" title="${sq.desc}｜獎勵：${sq.rewardText}">
-              <span style="color: ${done ? "#4ade80" : "#38bdf8"}; font-weight: 800;">[${done ? "已達成" : `支線 ${cur}/${tgt}`}]</span>
-              <span>${sq.title}（${sq.desc}）</span>
+              <span class="q-tag ${done ? "done" : "side"}">${done ? "已達成" : `支線 ${cur}/${tgt}`}</span>
+              <span>${sq.title.replace(/^【支線】/, "")}（${sq.desc}）</span>
             </div>`;
           })
           .join("");
