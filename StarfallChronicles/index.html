@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>《星隕編年史：霧海遺城》Chronicles of Starfall v2.0 — 16-Bit Pixel Art Edition</title>
+  <title>《星隕編年史：霧海遺城》Chronicles of Starfall</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
@@ -12,8 +12,8 @@
     <div class="brand-box" style="cursor: pointer;" title="點擊查看《星隕編年史》世界觀與玩法指南" onclick="window.gameUI.openModal('intro')">
       <span id="brand-px-logo"></span>
       <div>
-        <div class="brand-title">星隕編年史：霧海遺城 (3D 魔物獵人狩獵紀元)</div>
-        <div style="font-size: 11px; color: #94a3b8;">Chronicles of Starfall: Monster Hunter 3D Edition v4.0</div>
+        <div class="brand-title">星隕編年史：霧海遺城</div>
+        <div style="font-size: 11px; color: #94a3b8;">Chronicles of Starfall</div>
       </div>
       <span id="chapter-title" class="chapter-badge">第一章：微光漁村與迷霧森林</span>
     </div>
@@ -47,7 +47,7 @@
     </div>
     <div style="display: flex; gap: 6px; flex-wrap: wrap;">
       <button id="btn-toggle-3d" class="guide-auto-btn" style="background: #7c2d12; border-color: #fb923c; color: #ffedd5;" onclick="window.gameUI.onToggle3DViewClick()">
-        [V] 視角：3D越肩狩獵
+        [V] 視角：2D經典像素
       </button>
       <button id="btn-sharpen" class="guide-auto-btn" style="background: #4c1d95; border-color: #c084fc; color: #f3e8ff;" onclick="window.gameUI.onSharpenWeaponClick()">
         [R] 砥石磨刀 (紫斬 100)
@@ -228,7 +228,7 @@
   <div id="modal-intro" class="modal-overlay active">
     <div class="modal-card" style="max-width: 680px;">
       <div class="modal-header">
-        <h2>《星隕編年史：霧海遺城》— 3D 魔物獵人狩獵冒險指南</h2>
+        <h2>《星隕編年史：霧海遺城》— 狩獵冒險指南</h2>
         <button class="modal-close" onclick="safeCloseIntro()">X</button>
       </div>
       <div class="modal-body">
@@ -237,13 +237,13 @@
           <div>
             <h3 style="color: #facc15; margin-bottom: 6px; font-size: 16px;">故事背景與你的目標</h3>
             <p style="font-size: 13.5px; line-height: 1.65; color: #e2e8f0;">
-              三十年前，「星隕之夜」墜落的活體星辰讓整座王國被紫霧籠罩。你扮演年輕的尋星獵人<strong>艾爾文</strong>，帶著隨行艾露星貓<strong>露米</strong>，從微光漁村出發探索<strong>五大章節、共 15 座相連的 3D 巨型狩獵場</strong>，完成公會委託、挑戰各區菁英與古龍種巨型魔物！
+              三十年前，「星隕之夜」墜落的活體星辰讓整座王國被紫霧籠罩。你扮演年輕的尋星獵人<strong>艾爾文</strong>，帶著隨行艾露星貓<strong>露米</strong>，從微光漁村出發探索<strong>五大章節、共 15 座相連的巨型狩獵場</strong>，完成公會委託、挑戰各區菁英與古龍種巨型魔物！
             </p>
           </div>
         </div>
 
         <div class="inv-card equipped" style="padding: 12px;">
-          <div style="color: #38bdf8; font-weight: 800; font-size: 14px; margin-bottom: 6px;">3D 魔物獵人核心系統指南</div>
+          <div style="color: #38bdf8; font-weight: 800; font-size: 14px; margin-bottom: 6px;">狩獵核心系統指南</div>
           <p style="font-size: 13px; line-height: 1.65; color: #f1f5f9;">
             1. <strong>視角切換與導蟲引路</strong>：遊戲預設為 2D 經典像素視角；按 <strong>[V]</strong> 鍵可切換 3D越肩 / 3D廣角 / 2D像素，3D 視角下按 <strong>[J] / [L]</strong> 鍵旋轉鏡頭。<br />
             2. <strong>武器斬味與砥石研磨 [R]</strong>：維持紫斬享 1.38 倍超高傷害加成；按 <strong>[R]</strong> 鍵可研磨砥石回滿斬味並獲得【剛刃研磨】。<br />
@@ -254,7 +254,7 @@
 
         <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
           <button class="btn-primary" style="font-size: 15px; padding: 10px 24px;" onclick="safeCloseIntro()">
-            啟程出獵！進入 3D 狩獵世界 [按 Space 或點擊此處]
+            啟程出獵！[按 Space 或點擊此處]
           </button>
         </div>
       </div>

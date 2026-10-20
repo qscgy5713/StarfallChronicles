@@ -1291,3 +1291,68 @@ body:has(.combat-overlay.active) .char-drawer {
 .hud-quests.open + .hud-log {
   display: block;
 }
+
+/* ============================================================
+   視窗（背包、鍛造、商店、技能、圖鑑、存檔）：與浮動 HUD 一致的毛玻璃風格
+   ============================================================ */
+.modal-overlay {
+  background: rgba(3, 6, 14, 0.6);
+  backdrop-filter: blur(6px);
+}
+
+.modal-card {
+  background: linear-gradient(180deg, rgba(16, 26, 46, 0.96), rgba(8, 13, 26, 0.97));
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.modal-header {
+  background: rgba(30, 41, 59, 0.55);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.modal-close {
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.modal-close:hover {
+  border-color: #facc15;
+  color: #facc15;
+}
+
+.modal-body {
+  scrollbar-width: thin;
+}
+
+.inv-card {
+  border-radius: 8px;
+}
+
+/* ============================================================
+   小視窗適配（高度或寬度不足時精簡 HUD）
+   ============================================================ */
+@media (max-height: 720px) {
+  .hud-log { display: none !important; }
+  .top-nav-btns { bottom: 64px; max-height: calc(100vh - 210px); gap: 4px; }
+  .top-nav-btns .nav-btn { width: 36px; height: 36px; }
+  .guide-banner > div:last-child .guide-auto-btn { padding: 5px 9px; font-size: 11px; }
+  .hud-status .stat-bars { gap: 3px; }
+}
+
+@media (max-width: 1100px) {
+  .guide-banner > div:last-child { max-width: calc(100vw - 80px); overflow-x: auto; scrollbar-width: none; }
+  .guide-banner > div:last-child .guide-auto-btn { padding: 5px 8px; font-size: 11px; white-space: nowrap; }
+  .guide-banner > div:first-child { max-width: calc(100vw - 460px); }
+  .hud-float { width: 176px; }
+  .hud-float:has(.hud-quests.open) { width: 220px; }
+}
+
+@media (max-width: 760px) {
+  .guide-banner > div:first-child { display: none; }
+  .hud-float { display: none; }
+  body.drawer-open .hud-float { display: none; }
+}

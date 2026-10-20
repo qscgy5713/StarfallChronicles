@@ -1277,8 +1277,77 @@ class PixelArtEngine {
     return T[chapter] || T[1];
   }
 
-  groundTile(ctx, th, x, y, px, py, ts) {
-    const p = ts / 16;
+  hexRGB(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  vnoise(u, v, k) {
+    const x0 = Math.floor(u), y0 = Math.floor(v);
+    const fx = u - x0, fy = v - y0;
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const a = this.hash2(x0, y0, k), b = this.hash2(x0 + 1, y0, k);
+    const c = this.hash2(x0, y0 + 1, k), d = this.hash2(x0 + 1, y0 + 1, k);
+    return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy;
+  }
+
+  // 平滑自然地表（雜訊跨格連續）+ 草葉，結果快取為離屏畫布
+  groundTile(ctx, th, x, y, px, py, ts, chapter) {
+    const T = Math.max(8, Math.round(ts));
+    const key = `${chapter}:${x},${y}:${T}`;
+    this.groundCache = this.groundCache || new Map();
+    if (this.groundCache.size > 2500) this.groundCache.clear(); // 避免視窗縮放或跨章節累積過多快取
+    let cv = this.groundCache.get(key);
+    if (!cv && typeof document !== "undefined") {
+      try {
+        const c = document.createElement("canvas");
+        c.width = T; c.height = T;
+        const g = c.getContext("2d");
+        const img = g.createImageData(T, T);
+        const A = this.hexRGB(th.ground), B = this.hexRGB(th.groundAlt), D = this.hexRGB(th.dark);
+        for (let j = 0; j < T; j++) {
+          for (let i = 0; i < T; i++) {
+            const u = x + i / T, v = y + j / T;
+            const n1 = this.vnoise(u * 2.2, v * 2.2, 11);
+            const n2 = this.vnoise(u * 7, v * 7, 23);
+            const n3 = this.vnoise(u * 18, v * 18, 37);
+            const m = Math.min(1, Math.max(0, n1 * 0.7 + n2 * 0.3));
+            const dark = Math.max(0, n3 - 0.62) * 0.9;
+            const o = (j * T + i) * 4;
+            for (let k = 0; k < 3; k++) {
+              let val = A[k] + (B[k] - A[k]) * m;
+              val = val * (0.93 + n2 * 0.12) + (D[k] - val) * dark;
+              img.data[o + k] = val;
+            }
+            img.data[o + 3] = 255;
+          }
+        }
+        g.putImageData(img, 0, 0);
+        // 草葉 / 地表細節線條
+        const blades = chapter === 1 ? 16 : chapter === 2 ? 5 : chapter === 3 ? 6 : chapter === 4 ? 6 : 8;
+        for (let q = 0; q < blades; q++) {
+          const bx = this.hash2(x, y, 50 + q) * T, by = this.hash2(x, y, 80 + q) * T;
+          const hh = T * (0.08 + this.hash2(x, y, 110 + q) * 0.1);
+          const lean = (this.hash2(x, y, 140 + q) - 0.5) * T * 0.08;
+          const light = this.hash2(x, y, 170 + q) > 0.5;
+          if (chapter === 1) g.strokeStyle = light ? "rgba(190,245,150,0.75)" : "rgba(30,90,30,0.55)";
+          else if (chapter === 2) g.strokeStyle = light ? "rgba(255,255,255,0.6)" : "rgba(150,125,80,0.5)";
+          else if (chapter === 3) g.strokeStyle = light ? "rgba(240,170,100,0.55)" : "rgba(70,30,12,0.5)";
+          else if (chapter === 4) g.strokeStyle = light ? "rgba(255,255,255,0.8)" : "rgba(120,160,200,0.5)";
+          else g.strokeStyle = light ? "rgba(244,114,182,0.55)" : "rgba(30,10,30,0.5)";
+          g.lineWidth = Math.max(1, T * 0.03);
+          g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + lean, by - hh); g.stroke();
+        }
+        this.groundCache.set(key, c);
+        cv = c;
+      } catch (e) {
+        cv = null;
+      }
+    }
+    if (cv) {
+      ctx.drawImage(cv, Math.floor(px), Math.floor(py), Math.ceil(ts), Math.ceil(ts));
+      return;
+    }
     const sub = ts / 4;
     for (let sy = 0; sy < 4; sy++) {
       for (let sx = 0; sx < 4; sx++) {
@@ -1347,11 +1416,11 @@ class PixelArtEngine {
     }
 
     // ---------------- 地面 ----------------
-    this.groundTile(ctx, th, x, y, px, py, ts);
+    this.groundTile(ctx, th, x, y, px, py, ts, chapter);
 
     if (tileType !== "#") {
       // 地表細節：草簇、花、小石、龜裂
-      if (h1 > 0.45) {
+      if (false) {
         const bx = px + p * (2 + h2 * 11), by = py + p * (4 + h3 * 9);
         if (chapter === 1) {
           ctx.fillStyle = th.dark;
@@ -1397,7 +1466,7 @@ class PixelArtEngine {
       ctx.fillRect(px + p * 6.5, py + p * 10, p * 3, p * 5.5);
       ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(px + p * 8.5, py + p * 10, p, p * 5.5);
       const cx = px + ts * 0.5, cy = py + ts * 0.42 + sway * p * 0.2;
-      const blobs = [[-3.2, 1.2, 5.6], [3.2, 1.6, 5.2], [0, -2.4, 6.4], [0, 2.6, 5]];
+      const blobs = [[-4, 0.6, 6.6], [4, 1.2, 6.2], [0, -3.4, 7.6], [0, 2.4, 6]];
       blobs.forEach(([ox, oy, r], i) => {
         const g = ctx.createRadialGradient(cx + (ox - 1.5) * p, cy + (oy - 2) * p, p, cx + ox * p, cy + oy * p, r * p);
         g.addColorStop(0, "#7be38a"); g.addColorStop(0.5, "#2f9e44"); g.addColorStop(1, "#13532a");

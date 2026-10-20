@@ -731,6 +731,20 @@ class GameUI {
     ctx.fillStyle = "#0a1410";
     ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
 
+    // 地圖邊界外：以牆體地形鋪滿並壓暗，營造世界邊緣的森林/岩壁感
+    if (!this.engine.state.fullMapView) {
+      const gx0 = Math.floor(-ox / ts) - 1, gx1 = Math.ceil((this.logicalWidth - ox) / ts) + 1;
+      const gy0 = Math.floor(-oy / ts) - 1, gy1 = Math.ceil((this.logicalHeight - oy) / ts) + 1;
+      for (let gy = gy0; gy <= gy1; gy++) {
+        for (let gx = gx0; gx <= gx1; gx++) {
+          if (gx >= 0 && gx < cols && gy >= 0 && gy < rows) continue;
+          this.px.drawTerrainTile(ctx, "#", this.engine.state.chapter, gx, gy, gx * ts + ox, gy * ts + oy, ts, this.animFrame, {});
+          ctx.fillStyle = "rgba(8, 14, 12, 0.68)";
+          ctx.fillRect(gx * ts + ox, gy * ts + oy, ts, ts);
+        }
+      }
+    }
+
     for (let y = 0; y < rows; y++) {
       const py = y * ts + oy;
       if (py + ts < 0 || py > this.logicalHeight) continue;
@@ -769,6 +783,40 @@ class GameUI {
           ctx.fillStyle = "rgba(20, 30, 50, 0.3)";
           ctx.fillRect(px, py, ts, ts);
         }
+      }
+    }
+
+    // 環境動態：陽光光束與章節粒子（花瓣/浪花/餘燼/雪/紫光微粒）
+    {
+      const W = this.logicalWidth, H = this.logicalHeight;
+      const chA = this.engine.state.chapter || 1;
+      const af = this.animFrame;
+      if (chA !== 3 && chA !== 5) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (let i = 0; i < 4; i++) {
+          const x0 = W * (0.25 + i * 0.2) + Math.sin(af * 0.008 + i * 2) * 26;
+          const g = ctx.createLinearGradient(x0, 0, x0 - W * 0.22, H);
+          g.addColorStop(0, "rgba(255,246,205,0.13)");
+          g.addColorStop(1, "rgba(255,246,205,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.moveTo(x0, 0); ctx.lineTo(x0 + 70, 0); ctx.lineTo(x0 - W * 0.22 + 40, H); ctx.lineTo(x0 - W * 0.22 - 60, H);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+      }
+      const cols2 = { 1: "255,190,215", 2: "255,255,255", 3: "255,150,60", 4: "255,255,255", 5: "220,160,255" };
+      const pc = cols2[chA] || cols2[1];
+      for (let i = 0; i < 34; i++) {
+        const seed = i * 53.7;
+        let fx, fy;
+        if (chA === 3) { fx = (seed * 7 + Math.sin(af * 0.03 + i) * 20) % W; fy = H - ((af * (0.6 + (i % 4) * 0.25) + seed * 11) % H); }
+        else if (chA === 4) { fx = (seed * 9 + Math.sin(af * 0.02 + i) * 24 + af * 0.2) % W; fy = ((af * (0.5 + (i % 3) * 0.3) + seed * 13) % H); }
+        else { fx = (seed * 11 + af * (0.3 + (i % 4) * 0.12)) % W; fy = ((seed * 17 + Math.sin(af * 0.025 + i) * 26) % H + H) % H * 0.95; }
+        const sz = chA === 4 ? 2 + (i % 3) : 2 + (i % 2);
+        ctx.fillStyle = `rgba(${pc},${0.35 + 0.4 * Math.abs(Math.sin(af * 0.04 + i))})`;
+        ctx.fillRect(Math.round(fx), Math.round(fy), sz, sz);
       }
     }
 
@@ -1064,6 +1112,16 @@ class GameUI {
   }
 
   drawPixelTileObject(ctx, tile, x, y, px, py, ts, frame2) {
+    const alive = tile === "E" || tile === "B" || tile === "N";
+    const bob = alive ? Math.sin(this.animFrame * 0.09 + x * 1.7 + y) * Math.max(1.5, ts * 0.04) : 0;
+    if (!bob) return this.drawPixelTileObjectCore(ctx, tile, x, y, px, py, ts, frame2);
+    ctx.save();
+    ctx.translate(0, bob);
+    this.drawPixelTileObjectCore(ctx, tile, x, y, px, py, ts, frame2);
+    ctx.restore();
+  }
+
+  drawPixelTileObjectCore(ctx, tile, x, y, px, py, ts, frame2) {
     if (tile === "." || tile === "#" || tile === "~" || tile === "=") return;
     const ev = this.engine.resolveEventAt ? this.engine.resolveEventAt(x, y, tile) : this.engine.activeEvents[`${x},${y}`];
     const pad = Math.max(2, Math.round(ts * 0.09));
@@ -1216,6 +1274,14 @@ class GameUI {
     const chNum = this.engine.state.chapter || 1;
     const horizonY = h - 48;
 
+    // 偵測主角受傷（生命下降）→ 觸發主角受擊閃爍與魔物撲擊
+    const hpNow = this.engine.state.hp;
+    if (typeof this._lastHeroHp === "number" && hpNow < this._lastHeroHp) {
+      this._heroHitTicks = 18;
+      this._enemyLungeTicks = 18;
+    }
+    this._lastHeroHp = hpNow;
+
     ctx.clearRect(0, 0, w, h);
 
     // 1. 章節日景：天空、太陽、雲、遠山
@@ -1319,14 +1385,29 @@ class GameUI {
     // 5. 繪製主角、星靈夥伴與腳底光環落影
     const heroLunge = c.slashAnim > 0 ? 38 : 0;
     const heroBob = Math.sin(this.animFrame * 0.1) * 2;
-    const hx = 120 + heroLunge;
+    const heroHit = this._heroHitTicks > 0;
+    const hx = 120 + heroLunge + (heroHit ? (Math.random() - 0.5) * 8 : 0);
     const hy = h - 122 + heroBob;
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
     ctx.beginPath();
     ctx.ellipse(hx + 40, h - 44, 34, 8, 0, 0, Math.PI * 2);
     ctx.fill();
-    this.px.drawSprite(ctx, frame2 ? "hero_1" : "hero_0", hx, hy, 80);
+    if (!(heroHit && this._heroHitTicks % 4 < 2)) {
+      this.px.drawSprite(ctx, frame2 ? "hero_1" : "hero_0", hx, hy, 80);
+    }
+    if (heroHit) {
+      ctx.strokeStyle = "#fecaca";
+      ctx.lineWidth = 3;
+      for (let k = 0; k < 6; k++) {
+        const ang = k * 1.05 + this._heroHitTicks * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(hx + 40 + Math.cos(ang) * 14, hy + 40 + Math.sin(ang) * 14);
+        ctx.lineTo(hx + 40 + Math.cos(ang) * 34, hy + 40 + Math.sin(ang) * 34);
+        ctx.stroke();
+      }
+      this._heroHitTicks--;
+    }
 
     const petObj = this.engine.data.companions[this.engine.state.companion || "lumi"];
     if (petObj) {
@@ -1344,8 +1425,13 @@ class GameUI {
     if (c.shake > 0) c.shake--;
 
     const bossSize = c.isBoss ? 112 : 92;
-    const enemyX = w - 230 + shakeX;
-    const enemyY = (c.isBoss ? h - 148 : h - 130) + shakeY;
+    let lungeX = 0;
+    if (this._enemyLungeTicks > 0) {
+      lungeX = -Math.sin(((18 - this._enemyLungeTicks) / 18) * Math.PI) * 120;
+      this._enemyLungeTicks--;
+    }
+    const enemyX = w - 230 + shakeX + lungeX;
+    const enemyY = (c.isBoss ? h - 148 : h - 130) + shakeY + Math.sin(this.animFrame * 0.09) * 3;
 
     ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
     ctx.beginPath();
@@ -1362,7 +1448,10 @@ class GameUI {
       ctx.restore();
     }
 
+    const hurtFlash = c.shake > 0 && "filter" in ctx;
+    if (hurtFlash) ctx.filter = "brightness(2.1)";
     this.px.drawSprite(ctx, c.icon || "enemy_wolf", enemyX, enemyY, bossSize);
+    if (hurtFlash) ctx.filter = "none";
 
     // 7. 繪製五屬性專屬技能彈道與雙重交叉斬擊像素光束
     if (c.slashAnim > 0) {

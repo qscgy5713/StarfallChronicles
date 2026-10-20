@@ -1432,6 +1432,13 @@ class MH3DRenderer {
 
   // ==================== 魔物獵人風格 HUD：斬味刀刃計、太刀氣刃槽、貓飯與 3D 羅盤 ====================
   drawMonsterHunterFieldHUD(ctx, w, h, animFrame) {
+    ctx.save();
+    ctx.translate(Math.round(w * 0.1), 0); // 避開左上浮動狀態 HUD
+    this.drawMonsterHunterFieldHUDInner(ctx, w, h, animFrame);
+    ctx.restore();
+  }
+
+  drawMonsterHunterFieldHUDInner(ctx, w, h, animFrame) {
     const s = this.engine.state;
     const sharpInfo = this.engine.getSharpnessTierInfo ? this.engine.getSharpnessTierInfo() : { label: "紫斬", color: "#c084fc", mult: 1.38 };
     const sharpVal = typeof s.sharpness === "number" ? s.sharpness : 100;
