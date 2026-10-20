@@ -1332,12 +1332,12 @@ class GameUI {
     }
     const viewBtn = document.getElementById("btn-toggle-view");
     if (viewBtn) {
-      viewBtn.textContent = `[M] 視角：${this.engine.state.fullMapView ? "40x28全景" : "近景跟隨"}`;
+      viewBtn.textContent = `[M] 全景地圖：${this.engine.state.fullMapView ? "開" : "關"}`;
     }
     const pulseBtn = document.getElementById("btn-astral-pulse");
     if (pulseBtn) {
       const cd = this.engine.state.pulseCooldown || 0;
-      pulseBtn.textContent = cd > 0 ? `[Q] 星輝脈衝 (${cd}步/12MP)` : `[Q] 星輝脈衝 (破牆/拆陷阱/奇襲)`;
+      pulseBtn.textContent = cd > 0 ? `[Q] 星輝脈衝 (冷卻 ${cd} 步)` : `[Q] 星輝脈衝`;
     }
     const elemBtn = document.getElementById("btn-weapon-elem");
     if (elemBtn) {

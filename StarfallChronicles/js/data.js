@@ -395,7 +395,7 @@ const GAME_DATA = {
       effect: { type: "weaken", turns: 2 },
       unlockedByDefault: false,
       costSP: 1,
-      desc: "[寒霜] 釋放極寒星霧。造成 140% 冰屬性傷害，擊碎 2 點護盾並令敵人【虛弱】2 回合。"
+      desc: "[寒霜] 釋放極寒星霧。造成 140% 冰屬性傷害，擊碎 2 點護盾並令敵人【虛弱】4 秒。"
     },
     starlight_mend: {
       id: "starlight_mend",

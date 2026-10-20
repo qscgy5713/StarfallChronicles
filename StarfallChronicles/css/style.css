@@ -1348,3 +1348,4 @@ body.in-combat .rt-top, body.in-combat .rt-log { display: block; }
 
 .vol-row { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-size: 14px; color: #e2e8f0; }
 .vol-row input[type="range"] { flex: 1; accent-color: #facc15; }
+.guide-auto-btn[hidden] { display: none !important; }

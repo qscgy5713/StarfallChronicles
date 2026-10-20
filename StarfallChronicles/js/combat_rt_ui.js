@@ -226,6 +226,9 @@ const GameUIRT = {
         cdOf(el, 100 - ch, 100, !c || ch < 100);
       } else if (id === "sharpen") {
         cdOf(el, rt ? rt.sharpenCd : 0, 6, false);
+        if (this.engine.getSharpnessTierInfo) {
+          el.querySelector(".rt-slot-sub").textContent = `${this.engine.getSharpnessTierInfo().label} ${Math.round(s.sharpness ?? 100)}`;
+        }
       } else if (id === "elem") {
         el.querySelector(".rt-slot-sub").textContent = RT_ELEM_NAMES[s.weaponElement || "physical"];
       } else if (id === "auto") {
