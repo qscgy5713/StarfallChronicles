@@ -4,6 +4,14 @@
  */
 
 const RT_HP_MULT = 14;
+// 無盡星淵層詞綴：每層固定一種，依樓層循環 (第 1 層為較溫和的「豐饒」)
+const ABYSS_MODS = [
+  { id: "bounty", name: "豐饒", desc: "額外剝取 2 次素材、金幣獎勵 +50%", carve: 2, gold: 1.5 },
+  { id: "fierce", name: "猛攻", desc: "魔物傷害 +30%", dmg: 1.3 },
+  { id: "sturdy", name: "堅殼", desc: "魔物血量 +30%、護盾 +1", hp: 1.3, shield: 1 },
+  { id: "frenzy", name: "狂暴", desc: "魔物開戰即進入憤怒狀態", enraged: true }
+];
+const abyssModOf = id => ABYSS_MODS.find(m => m.id === id) || null;
 
 class StarfallEngine {
   constructor(data) {
@@ -1652,7 +1660,42 @@ class StarfallEngine {
     }
   }
 
+  // 可從哪一層開始：第 1 層，以及每通關 5 層後的下一層 (6、11、16...)
+  getAbyssStartFloors() {
+    const best = this.state.maxAbyssFloor || 0;
+    const list = [1];
+    for (let f = 6; f <= best + 1; f += 5) list.push(f);
+    return list;
+  }
+
+  getAbyssMod(floor) {
+    return ABYSS_MODS[(Math.max(1, floor) - 1) % ABYSS_MODS.length];
+  }
+
+  // 離開星淵，回到進入前的章節區域與座標
+  leaveAbyss() {
+    if (!this.state.inAbyss) return false;
+    const ret = this.state.abyssReturn || { chapter: this.state.chapter || 1, subZone: 1, x: null, y: null };
+    this.state.abyssReturn = null;
+    this.combat = null;
+    this.state.subZone = ret.subZone;
+    if (ret.x !== null && ret.y !== null) {
+      this.state.x = ret.x;
+      this.state.y = ret.y;
+      this.loadChapter(ret.chapter, false, ret.subZone);
+    } else {
+      this.loadChapter(ret.chapter, true, ret.subZone);
+    }
+    this.log("[離開星淵] 你踏上星軌，回到了原本的地方。", "chapter");
+    return true;
+  }
+
   enterAbyss(floor = 1) {
+    if (!this.state.inAbyss) {
+      this.state.abyssReturn = { chapter: this.state.chapter, subZone: this.state.subZone || 1, x: this.state.x, y: this.state.y };
+    }
+    const mod = this.getAbyssMod(floor);
+    this.state.abyssMod = mod.id;
     this.state.inAbyss = true;
     this.state.abyssFloor = floor;
     if (floor > this.state.maxAbyssFloor) {
@@ -1753,7 +1796,7 @@ class StarfallEngine {
       "mist_wolf", "corrupted_treant", "drowned_sentinel", "tide_siren",
       "magma_golem", "ash_drake", "astral_wraith", "star_inquisitor", "citadel_templar"
     ];
-    const bossPool = ["boss_thorn_behemoth", "boss_chronos", "boss_ignis", "boss_astra"];
+    const bossPool = ["boss_thorn_behemoth", "boss_chronos", "boss_ignis", "boss_astra", "boss_moebius"];
 
     const enemyCoords = [[6, 4], [10, 3], [9, 9], [14, 5], [22, 8], [18, 16], [30, 12], [26, 22]];
     enemyCoords.forEach((pt, idx) => {
@@ -1765,7 +1808,8 @@ class StarfallEngine {
         id: `abyss_e_${floor}_${idx}`,
         enemyId: pick,
         patrol: idx >= 3,
-        abyssScale: 1 + floor * 0.14
+        abyssScale: 1 + floor * 0.14,
+        abyssMod: mod.id
       };
     });
 
@@ -1795,7 +1839,7 @@ class StarfallEngine {
     });
 
     grid[10][16] = "B";
-    const bossId = bossPool[(floor - 1) % bossPool.length];
+    const bossId = bossPool[(floor - 1) % bossPool.length]; // 每 5 層由噬星者守關
     const bossFlag = `abyss_boss_${floor}`;
     delete this.state.flags[bossFlag];
     events["16,10"] = {
@@ -1803,6 +1847,7 @@ class StarfallEngine {
       id: `abyss_b_${floor}`,
       enemyId: bossId,
       abyssScale: 1 + floor * 0.16,
+      abyssMod: mod.id,
       intro: `【無盡星淵 第 ${floor} 層】深淵裂隙中浮現出強化的幻影首領！`,
       winFlag: bossFlag
     };
@@ -1832,7 +1877,7 @@ class StarfallEngine {
     this.state.y = 6;
     this.state.exploredByChapter[`abyss_${floor}`] = {};
     this.updateFogOfWar();
-    this.log(`[無盡星淵] 踏入【無盡星淵試煉：第 ${floor} 層 (40x28 巨型裂隙)】！`, "chapter");
+    this.log(`[無盡星淵] 踏入【無盡星淵試煉：第 ${floor} 層 (40x28 巨型裂隙)】！本層詞綴【${mod.name}】：${mod.desc}`, "chapter");
   }
 
   getCurrentExploredMap() {
@@ -2924,16 +2969,19 @@ class StarfallEngine {
     const template = this.data.enemies[ev.enemyId];
     if (!template) return;
 
-    const scale = ev.abyssScale || 1.0;
+    // 星淵樓層放大：基礎倍率再以 3 倍斜率加成血量與攻擊，終局角色才會感到壓力
+    const scale = ev.abyssScale ? 1 + (ev.abyssScale - 1) * 3 : 1.0;
     const comp = this.getComputedStats();
     // 即時戰鬥中玩家出手頻率遠高於原回合制 (約 4~5 倍)，魔物生命以 RT_HP_MULT 倍補償，使一般魔物約 8~12 秒可擊倒
     const typeMult = template.isBoss ? 2.2 : template.isElite ? 1.5 : 1.8; // 首領/精英耐打，避免被技能連段秒殺
-    const maxHp = Math.round(template.hp * scale * RT_HP_MULT * typeMult);
+    const amod = abyssModOf(ev.abyssMod);
+    const chMult = 1 + ((template.chapter || 1) - 1) * 0.9; // 後期章節血量加成：玩家攻擊成長遠快於魔物血量
+    const maxHp = Math.round(template.hp * scale * RT_HP_MULT * typeMult * chMult * (amod && amod.hp ? amod.hp : 1));
     const elemNames = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
     const weakText = (template.weaknesses || []).map(w => elemNames[w] || w).join(" / ");
     const isAmbush = !!(ev.stunnedSteps && ev.stunnedSteps > 0);
     const startHp = isAmbush ? Math.max(1, Math.round(maxHp * 0.85)) : maxHp;
-    const startShield = isAmbush ? Math.max(1, template.shield - 1) : template.shield;
+    const startShield = (isAmbush ? Math.max(1, template.shield - 1) : template.shield) + (abyssModOf(ev.abyssMod) && abyssModOf(ev.abyssMod).shield ? abyssModOf(ev.abyssMod).shield : 0);
 
     const initLogs = [
       ev.intro || `[進入戰鬥] 遭遇敵人：【${template.name}】！`,
@@ -2964,10 +3012,12 @@ class StarfallEngine {
       enemyAtk: Math.round(template.atk * scale),
       enemyDef: Math.round(template.def * scale),
       enemyShield: startShield,
-      enemyMaxShield: template.shield,
+      enemyMaxShield: template.shield + (amod && amod.shield ? amod.shield : 0),
       brokenThisTurn: false,
       phase2Triggered: false,
-      enraged: false,
+      enraged: !!(amod && amod.enraged),
+      abyssMod: amod ? amod.id : null,
+      abyssDmg: amod && amod.dmg ? amod.dmg : 1,
       phase2Text: template.phase2Text || null,
       turn: 1,
       intentIndex: 0,
@@ -3435,7 +3485,8 @@ class StarfallEngine {
     const comp = this.getComputedStats();
 
     const expGain = Math.round(template.exp * comp.rewardMult);
-    const goldGain = Math.round(template.gold * comp.rewardMult);
+    const wmod = abyssModOf(c.abyssMod);
+    const goldGain = Math.round(template.gold * comp.rewardMult * (wmod && wmod.gold ? wmod.gold : 1));
     this.state.exp += expGain;
     this.state.gold += goldGain;
     this.state.stats.battlesWon++;
@@ -3466,7 +3517,7 @@ class StarfallEngine {
       if (pt.body && pt.body.broken) giveCarve(template.carve.hide);
       if (pt.tail && pt.tail.broken) giveCarve(template.carve.core);
       const coreRate = c.isBoss || c.isElite ? 0.18 : 0.1;
-      const rolls = c.isBoss ? 4 : c.isElite ? 3 : 2;
+      const rolls = (c.isBoss ? 4 : c.isElite ? 3 : 2) + (wmod && wmod.carve ? wmod.carve : 0);
       for (let i = 0; i < rolls; i++) {
         const r = Math.random();
         giveCarve(r < coreRate ? template.carve.core : r < coreRate + 0.35 ? template.carve.fang : template.carve.hide);
@@ -3477,6 +3528,25 @@ class StarfallEngine {
         const parts = Object.entries(sum).map(([n, k]) => `${n} x${k}`);
         this.log(`[剝取素材] 從【${c.name}】身上剝取：${parts.join("、")}。`, "success");
         parts.forEach(x => dropsWon.push(x));
+      }
+    }
+
+    // 星淵首領通關獎勵：金幣、必得稀有核心；每 5 層為里程碑 (虛空星塵 x2，首次再 +1 技能點)
+    if (this.state.inAbyss && c.eventObj && c.eventObj.id && String(c.eventObj.id).startsWith("abyss_b_")) {
+      const fl = this.state.abyssFloor;
+      const bonusGold = 100 + fl * 40;
+      this.state.gold += bonusGold;
+      const coreName = template.carve ? (this.data.items[template.carve.core] || {}).name : null;
+      if (template.carve) {
+        this.addItem(template.carve.core, 1);
+        dropsWon.push(`${coreName} x1`);
+      }
+      this.log(`[星淵第 ${fl} 層通關] 獲得通關獎勵 +${bonusGold} 金幣${coreName ? `與【${coreName}】` : ""}！`, "success");
+      if (fl % 5 === 0) {
+        this.addItem("void_essence", 2);
+        dropsWon.push("虛空星塵 x2");
+        this.state.flags[`abyss_milestone_${fl}`] = this.state.flags[`abyss_milestone_${fl}`] || (this.state.skillPoints++, true);
+        this.log(`[深淵里程碑] 突破第 ${fl} 層！獲得【虛空星塵】x2，首次突破另有 +1 技能點！下次可從第 ${fl + 1} 層開始挑戰。`, "achievement");
       }
     }
 

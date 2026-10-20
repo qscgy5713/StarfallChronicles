@@ -1489,7 +1489,9 @@ class GameUI {
     const tasks = [];
     if (s.inAbyss) {
       tasks.push({ done: false, text: `探索無盡星淵第 ${s.abyssFloor} 層並擊敗深淵首領` });
-      tasks.push({ done: false, text: `歷史最高紀錄：第 ${s.maxAbyssFloor} 層` });
+      const am = this.engine.getAbyssMod(s.abyssFloor);
+      tasks.push({ done: false, text: `本層詞綴【${am.name}】：${am.desc}` });
+      tasks.push({ done: false, text: `歷史最高紀錄：第 ${s.maxAbyssFloor} 層（點右側傳送圖示可離開）` });
     } else if (s.chapter === 1) {
       tasks.push({ done: !!s.keys["key_rusty_gate"], text: "[1-1] 與【村長奧爾森(4,1)】交談領取守林人銅鑰" });
       const lit = ["s1_west", "s1_south", "s1_east"].filter(k => s.flags[k]).length;
@@ -1641,6 +1643,9 @@ class GameUI {
         document.getElementById("btn-mute-modal").textContent = ss.muted ? "全部靜音：開" : "全部靜音：關";
       }
       document.getElementById("modal-audio").classList.add("active");
+    } else if (type === "abyss") {
+      this.renderAbyssModal();
+      document.getElementById("modal-abyss").classList.add("active");
     } else if (type === "canteen") {
       const el = document.getElementById("modal-canteen");
       if (el) el.classList.add("active");
@@ -2250,8 +2255,65 @@ class GameUI {
   }
 
   startAbyssFromEnding() {
+    this.openModal("abyss");
+  }
+
+  renderAbyssModal() {
+    const eng = this.engine;
+    const s = eng.state;
+    const box = document.getElementById("abyss-body");
+    if (!box) return;
+    const modLine = f => {
+      const m = eng.getAbyssMod(f);
+      return `<span class="badge-key">${m.name}</span> ${m.desc}`;
+    };
+    const head = `
+      <div class="inv-card equipped">
+        <div class="inv-card-head"><strong>歷史最高紀錄：第 ${s.maxAbyssFloor || 0} 層</strong></div>
+        <div class="inv-card-desc">
+          每層是一張 40×28 的裂隙，魔物隨樓層變強，擊敗層主後開啟傳送陣前往下一層。每層有固定詞綴；
+          層主通關必得稀有核心與金幣，每 5 層是噬星者守關，通關有里程碑獎勵，並解鎖從下一層重新開始。
+          魔物素材可用來鍛造狩獵裝備。
+        </div>
+      </div>`;
+    if (s.inAbyss) {
+      box.innerHTML = `${head}
+        <div class="inv-card" style="margin-top:8px;">
+          <div class="inv-card-head"><strong>目前位置：第 ${s.abyssFloor} 層</strong></div>
+          <div class="inv-card-desc">本層詞綴：${modLine(s.abyssFloor)}</div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn-secondary" onclick="window.gameUI.closeModals()">繼續挑戰</button>
+          <button class="btn-sm btn-accent" onclick="window.gameUI.onLeaveAbyss()">離開星淵（回到原本的地方）</button>
+        </div>`;
+      return;
+    }
+    const starts = eng.getAbyssStartFloors();
+    box.innerHTML = `${head}
+      <div class="craft-title" style="margin-top:12px;">選擇起始樓層</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${starts
+          .map(
+            f => `<div class="inv-card"><div class="inv-card-head">
+              <span><strong>第 ${f} 層</strong>${f > 1 ? ` <span class="badge-cnt">里程碑起點</span>` : ""}</span>
+              <button class="btn-sm btn-teal" onclick="window.gameUI.onStartAbyss(${f})">進入</button>
+            </div><div class="inv-card-desc">詞綴：${modLine(f)}</div></div>`
+          )
+          .join("")}
+      </div>
+      <div class="inv-card-desc" style="margin-top:10px;">進入後可隨時從這裡離開，回到進入前的位置。</div>`;
+  }
+
+  onStartAbyss(floor) {
     this.closeModals();
-    this.engine.enterAbyss(1);
+    this.engine.enterAbyss(floor);
+    this.showToast(`踏入無盡星淵第 ${floor} 層！`, "gold");
+    this.renderAll();
+  }
+
+  onLeaveAbyss() {
+    this.closeModals();
+    this.engine.leaveAbyss();
     this.renderAll();
   }
 }

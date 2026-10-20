@@ -482,7 +482,47 @@ function runTests() {
     console.log("[PASS] Test 11: 即時戰鬥（追擊/預警範圍/冷卻/距離/翻滾無敵/撤退）驗證通過");
   }
 
-  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 11 大自動化測試 100% 通過！ ===");
+  // Test 12: 無盡星淵 - 進出、詞綴、里程碑起點、層主通關獎勵
+  {
+    const ag = new StarfallEngine(global.window.GAME_DATA);
+    const ox = ag.state.x, oy = ag.state.y, och = ag.state.chapter;
+    ag.enterAbyss(1);
+    assert.ok(ag.state.inAbyss && ag.state.abyssMod === "bounty", "第 1 層應為豐饒詞綴");
+    assert.deepStrictEqual(ag.getAbyssStartFloors(), [1], "未通關前只能從第 1 層開始");
+    assert.ok(ag.leaveAbyss() && !ag.state.inAbyss, "應可離開星淵");
+    assert.strictEqual(ag.state.chapter, och, "離開後應回到原章節");
+    assert.ok(ag.state.x === ox && ag.state.y === oy, "離開後應回到進入前的座標");
+    ag.state.maxAbyssFloor = 5;
+    assert.deepStrictEqual(ag.getAbyssStartFloors(), [1, 6], "通關第 5 層後可從第 6 層開始");
+    ag.enterAbyss(2);
+    assert.strictEqual(ag.state.abyssMod, "fierce", "第 2 層應為猛攻詞綴");
+    const e2 = Object.values(ag.activeEvents).find(ev => ev.type === "enemy");
+    assert.strictEqual(e2.abyssMod, "fierce", "層內魔物應帶有詞綴");
+    ag.enterAbyss(3);
+    const sev = Object.values(ag.activeEvents).find(ev => ev.type === "enemy");
+    ag.startCombat(sev, "6,4");
+    const base = ag.data.enemies[sev.enemyId];
+    assert.strictEqual(ag.combat.enemyMaxShield, base.shield + 1, "堅殼詞綴護盾 +1");
+    ag.combat = null;
+    ag.enterAbyss(4);
+    const fev = Object.values(ag.activeEvents).find(ev => ev.type === "enemy");
+    ag.startCombat(fev, "6,4");
+    assert.ok(ag.combat.enraged, "狂暴詞綴開戰即憤怒");
+    ag.combat = null;
+    ag.enterAbyss(5);
+    const bev = Object.values(ag.activeEvents).find(ev => ev.type === "boss");
+    assert.strictEqual(bev.enemyId, "boss_moebius", "每 5 層由噬星者守關");
+    ag.startCombat(bev, "16,10");
+    const gold0 = ag.state.gold, sp0 = ag.state.skillPoints;
+    ag.winCombat();
+    assert.ok(ag.state.gold >= gold0 + 300, "層主通關應有金幣獎勵");
+    assert.ok((ag.state.inventory.boss_moebius_core || 0) >= 1, "層主通關必得稀有核心");
+    assert.ok((ag.state.inventory.void_essence || 0) >= 2, "里程碑層應得虛空星塵");
+    assert.ok(ag.state.skillPoints >= sp0 + 1, "首次突破里程碑層 +1 技能點");
+    console.log("[PASS] Test 12: 無盡星淵（進出/詞綴/里程碑起點/層主獎勵）驗證通過");
+  }
+
+  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 12 大自動化測試 100% 通過！ ===");
 }
 
 runTests();

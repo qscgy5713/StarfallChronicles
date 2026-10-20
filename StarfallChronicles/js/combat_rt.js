@@ -270,7 +270,7 @@ const StarfallRT = {
       c.enemyStatuses.atkBuff--;
     }
     if (c.enemyStatuses.weaken > 0) raw *= 0.7;
-    let dmg = Math.max(4, raw - comp.def * 0.65) * RT_ENEMY_DMG;
+    let dmg = Math.max(4, raw - comp.def * 0.65) * RT_ENEMY_DMG * (c.abyssDmg || 1);
     if (c.playerStatuses.vuln > 0) dmg *= 1.3;
 
     // 星紋障壁：展開 0.35 秒內承受攻擊 = 完美防反

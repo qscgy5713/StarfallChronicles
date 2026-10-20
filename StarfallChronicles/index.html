@@ -28,7 +28,7 @@
       <button title="鍛造工坊" class="nav-btn" onclick="window.gameUI.openModal('craft')"><span id="nav-ic-craft"></span>鍛造工坊</button>
       <button title="星界行商" class="nav-btn" onclick="window.gameUI.openModal('shop')"><span id="nav-ic-shop"></span>星界行商</button>
       <button title="圖鑑與成就" class="nav-btn" onclick="window.gameUI.openModal('codex')"><span id="nav-ic-codex"></span><span class="dock-badge"><span id="hud-lore-count">0/15</span> <span id="hud-ach-count" style="display:none">0/20</span></span></button>
-      <button title="無盡星淵" class="nav-btn" onclick="window.gameEngine.enterAbyss(1); window.gameUI.renderAll();"><span id="nav-ic-abyss"></span>無盡星淵</button>
+      <button title="無盡星淵" class="nav-btn" onclick="window.gameUI.openModal('abyss')"><span id="nav-ic-abyss"></span>無盡星淵</button>
       <button title="存檔 / 讀檔" class="nav-btn" onclick="window.gameUI.openModal('save')"><span id="nav-ic-save"></span>存檔/讀檔</button>
       <button title="音量設定" id="btn-mute" class="nav-btn" onclick="window.gameUI.openModal('audio')">音量</button>
     </div>
@@ -404,6 +404,19 @@
         <label class="vol-row">背景音樂 <input id="vol-music" type="range" min="0" max="100" step="5" oninput="window.soundSystem && window.soundSystem.setVolume('music', this.value / 100)" /></label>
         <label class="vol-row">音效 <input id="vol-sfx" type="range" min="0" max="100" step="5" oninput="window.soundSystem && window.soundSystem.setVolume('sfx', this.value / 100)" onchange="window.soundSystem && window.soundSystem.sfx('slash')" /></label>
         <button id="btn-mute-modal" class="btn-sm btn-secondary" onclick="toggleAudioMute()">全部靜音：關</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 無盡星淵：入口與狀態 -->
+  <div id="modal-abyss" class="modal-overlay">
+    <div class="modal-card" style="max-width: 640px;">
+      <div class="modal-header">
+        <h2>無盡星淵試煉</h2>
+        <button class="modal-close" onclick="window.gameUI.closeModals()">X</button>
+      </div>
+      <div class="modal-body">
+        <div id="abyss-body"></div>
       </div>
     </div>
   </div>
