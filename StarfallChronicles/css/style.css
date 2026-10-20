@@ -1181,6 +1181,8 @@ body.in-combat .hud-log {
   z-index: 30;
 }
 .rt-hud.active { display: block; }
+.rt-top, .rt-log { display: none; }
+body.in-combat .rt-top, body.in-combat .rt-log { display: block; }
 .rt-hud button { pointer-events: auto; }
 
 .rt-top {
@@ -1336,3 +1338,10 @@ body.in-combat .hud-log {
 .status-pill.regen { background: #14532d; color: #86efac; }
 .status-pill.armor { background: #334155; color: #e2e8f0; }
 .status-pill.buff { background: #881337; color: #fecdd3; }
+
+/* 常駐技能列在底部，原工具列上移成為其上方的小列 */
+.guide-banner > div:last-child {
+  bottom: 86px !important;
+  transform: translateX(-50%) scale(0.82);
+  transform-origin: bottom center;
+}

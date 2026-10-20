@@ -3,6 +3,9 @@
  * 100% 純手繪像素矩陣 (16x16) 轉 Canvas / DataURL，全遊戲零 Emoji，所有色盤代碼經過完整校驗
  */
 
+// 各圖集每列格數 (預設 12)
+const SHEET_COLS = { creatures: 10 };
+
 class PixelArtEngine {
   constructor() {
     this.cache = {};
@@ -50,18 +53,18 @@ class PixelArtEngine {
       hero_0: ["dungeon", 96], hero_1: ["dungeon", 96],
       npc_elder: ["dungeon", 100], npc_dwarf: ["dungeon", 111], npc_scholar: ["dungeon", 98],
       npc_mage: ["dungeon", 84], npc_goddess: ["dungeon", 99],
-      // 第三個元素為色調濾鏡，用來讓共用造型的魔物彼此區分
-      enemy_wolf: ["dungeon", 124], elite_fenrir: ["dungeon", 124, "hue-rotate(190deg) saturate(1.7) brightness(1.1)"],
-      boss_behemoth: ["dungeon", 123, "hue-rotate(75deg) saturate(1.3)"],
-      enemy_sentinel: ["dungeon", 97], enemy_drowned: ["dungeon", 97, "hue-rotate(150deg) saturate(1.5)"],
-      enemy_siren: ["dungeon", 108], elite_crab: ["dungeon", 110],
-      boss_chronos: ["dungeon", 86, "hue-rotate(20deg) saturate(1.6) brightness(1.1)"],
-      enemy_golem: ["dungeon", 109, "hue-rotate(-25deg) saturate(1.7)"], elite_vulcan: ["dungeon", 109, "hue-rotate(-40deg) saturate(2.4) brightness(0.75)"],
-      enemy_drake: ["dungeon", 120, "grayscale(0.7) brightness(0.95)"], boss_ignis: ["dungeon", 120, "hue-rotate(-30deg) saturate(3) brightness(1.05)"],
-      enemy_wraith: ["dungeon", 121], enemy_inquisitor: ["dungeon", 87], elite_twin: ["dungeon", 87, "hue-rotate(250deg) saturate(1.8)"],
-      boss_astra: ["dungeon", 112, "hue-rotate(230deg) saturate(1.6)"],
-      enemy_templar: ["dungeon", 96, "brightness(0.55) saturate(1.3)"], elite_regis: ["dungeon", 100, "brightness(0.6) hue-rotate(250deg) saturate(1.8)"],
-      boss_moebius: ["dungeon", 111, "hue-rotate(270deg) saturate(1.8) brightness(0.9)"],
+      // 魔物優先使用 Tiny Creatures (creatures 圖集，10 欄)；第三個元素為色調濾鏡
+      enemy_wolf: ["creatures", 24], elite_fenrir: ["creatures", 94],
+      boss_behemoth: ["creatures", 42],
+      enemy_sentinel: ["dungeon", 97], enemy_drowned: ["creatures", 17],
+      enemy_siren: ["creatures", 26], elite_crab: ["creatures", 145],
+      boss_chronos: ["creatures", 97],
+      enemy_golem: ["creatures", 45], elite_vulcan: ["creatures", 123],
+      enemy_drake: ["creatures", 32], boss_ignis: ["creatures", 33],
+      enemy_wraith: ["creatures", 19], enemy_inquisitor: ["creatures", 16], elite_twin: ["creatures", 18],
+      boss_astra: ["creatures", 37],
+      enemy_templar: ["creatures", 15], elite_regis: ["creatures", 96],
+      boss_moebius: ["creatures", 75],
       herb: ["town", 29], campfire_0: null, chest: ["dungeon", 89]
     };
     Object.keys(this.extMap).forEach(k => { if (!this.extMap[k]) delete this.extMap[k]; });
@@ -98,7 +101,8 @@ class PixelArtEngine {
     if (!m) return null;
     const img = this.ext.sheets[m[0]];
     if (!img) return null;
-    const sx = (m[1] % 12) * 16, sy = Math.floor(m[1] / 12) * 16;
+    const cols = SHEET_COLS[m[0]] || 12;
+    const sx = (m[1] % cols) * 16, sy = Math.floor(m[1] / cols) * 16;
     if (!m[2] || typeof document === "undefined") return { img, sx, sy };
     // 帶色調濾鏡的精靈：預先繪製到 16x16 離屏畫布並快取
     this.tintCache = this.tintCache || {};
@@ -119,7 +123,8 @@ class PixelArtEngine {
     if (!this.ext || !this.ext.ready || !this.ext.sheets[sheet]) return false;
     const prev = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.ext.sheets[sheet], (index % 12) * 16, Math.floor(index / 12) * 16, 16, 16, Math.floor(px), Math.floor(py), Math.ceil(size), Math.ceil(size));
+    const cols = SHEET_COLS[sheet] || 12;
+    ctx.drawImage(this.ext.sheets[sheet], (index % cols) * 16, Math.floor(index / cols) * 16, 16, 16, Math.floor(px), Math.floor(py), Math.ceil(size), Math.ceil(size));
     ctx.imageSmoothingEnabled = prev;
     return true;
   }

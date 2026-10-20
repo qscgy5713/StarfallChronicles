@@ -530,6 +530,11 @@ class GameUI {
         return;
       }
 
+      if (this.handleFieldSkillKey(e)) {
+        e.preventDefault();
+        return;
+      }
+
       if (e.key === "q" || e.key === "Q") {
         e.preventDefault();
         this.onAstralPulseClick();
@@ -977,6 +982,7 @@ class GameUI {
     }
 
     if (combatNow && combatNow.rt) this.drawRtEffects(ctx, ts, ox, oy);
+    else this.drawFieldSwing(ctx, hx, hy, ts);
 
     // 近景跟隨視角下的 HD-2D 柔和暗角 (Atmospheric Vignette)
     if (!this.engine.state.fullMapView) {

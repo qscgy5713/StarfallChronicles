@@ -50,6 +50,7 @@
 - `[M]`：切換 40x28 全景戰略地圖
 
 **即時戰鬥（直接在地圖上進行，沒有回合與等待）**
+- 底部技能列平時就常駐：探索中可用 `[1]`~`[9]` / `[Space]` 揮技能示意、治療技能可直接補血，碰到魔物後技能才實際生效
 - 碰到魔物即開戰：魔物會追著你跑，出招前地面會出現**紅色預警圈**，圈滿即命中——走位離開或翻滾閃避
 - `WASD` / `方向鍵`（按住持續移動）：走位
 - `[1]`~`[9]` / 點擊技能列：施放技能，各有冷卻；近戰技能距離不足時會自動衝刺貼近，魔法技能可遠距離施放
@@ -106,4 +107,4 @@ node StarfallChronicles/tests/test_game.js
 ---
 
 ## 第三方素材致謝
-- 角色、怪物與樹木美術使用 [Kenney](https://kenney.nl) 的 **Tiny Dungeon** 與 **Tiny Town** 素材包（CC0 公有領域）。詳見 [`StarfallChronicles/assets/kenney/README.md`](./StarfallChronicles/assets/kenney/README.md)。
+- 角色、怪物與樹木美術使用 [Kenney](https://kenney.nl) 的 **Tiny Dungeon**、**Tiny Town** 素材包，以及 Clint Bellanger 的 **Tiny Creatures** 魔物素材包（皆為 CC0 公有領域）。詳見 [`StarfallChronicles/assets/kenney/README.md`](./StarfallChronicles/assets/kenney/README.md)。

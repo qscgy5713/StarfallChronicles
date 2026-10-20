@@ -20,10 +20,22 @@ const GameUIRT = {
     const hud = document.getElementById("rt-hud");
     if (document.body) document.body.classList.toggle("in-combat", !!c);
     if (!hud || !hud.querySelectorAll) return; // 無完整 DOM (如單元測試) 時略過
+    hud.classList.add("active"); // 技能列平時也常駐於底部
+    const s = this.engine.state;
+    const sig = s.unlockedSkills.join(",") + "|" + Object.keys(s.inventory).filter(id => {
+      const it = this.engine.data.items[id];
+      return it && it.usableInCombat && s.inventory[id] > 0;
+    }).join(",");
+    if (this._hotbarSig !== sig) {
+      this._hotbarSig = sig;
+      this.buildHotbar();
+    }
     if (!c) {
-      hud.classList.remove("active");
       this._rtRef = null;
       this._rtDirs = [];
+      const strip = document.getElementById("rt-strip");
+      if (strip) this._setHtml(strip, "");
+      this.updateRtSlots();
       return;
     }
     if (this._rtRef !== c) {
@@ -31,17 +43,14 @@ const GameUIRT = {
       this._mfx = c.rt.mx;
       this._mfy = c.rt.my;
       this._rtLogLen = -1;
-      this.buildRtHud();
+      this.buildMonsterPanel();
     }
-    hud.classList.add("active");
     this.updateRtHud();
   },
 
-  buildRtHud() {
+  buildMonsterPanel() {
     const c = this.engine.combat;
-    const s = this.engine.state;
     const top = document.getElementById("rt-top");
-    const bottom = document.getElementById("rt-bottom");
     const tag = c.isBoss ? `<span class="rt-badge boss">首領</span>` : c.isElite ? `<span class="rt-badge elite">精英</span>` : "";
     const weak = (c.weaknesses || []).map(w => RT_ELEM_NAMES[w] || w).join(" / ") || "無";
     top.innerHTML = `
@@ -60,7 +69,12 @@ const GameUIRT = {
         </div>
         <div id="rt-pills" class="rt-pills"></div>
       </div>`;
+  },
 
+  // 底部常駐技能列：探索與戰鬥共用，戰鬥時才有冷卻與距離判定
+  buildHotbar() {
+    const s = this.engine.state;
+    const bottom = document.getElementById("rt-bottom");
     const slotHtml = (key, icon, name, sub, attrs) =>
       `<button class="rt-slot" ${attrs}><span class="rt-key">${key}</span>${icon ? this.px.icon(icon, 22) : ""}<span class="rt-slot-name">${name}</span><span class="rt-slot-sub">${sub}</span><u></u></button>`;
     const skills = s.unlockedSkills
@@ -178,10 +192,11 @@ const GameUIRT = {
   },
 
   updateRtSlots() {
+    if (!this._rtSlots) return;
     const c = this.engine.combat;
-    const rt = c.rt;
+    const rt = c && c.rt;
     const s = this.engine.state;
-    const dist = this.engine.rtHeroDist();
+    const dist = rt ? this.engine.rtHeroDist() : 0;
     const cdOf = (el, rem, max, off) => {
       el.querySelector("u").style.height = rem > 0 ? Math.min(100, (rem / max) * 100) + "%" : "0%";
       el.classList.toggle("off", !!off);
@@ -190,32 +205,34 @@ const GameUIRT = {
       const [kind, id] = k.split(":");
       if (kind === "sk") {
         const sk = this.engine.data.skills[id];
+        if (!sk) continue;
         const lack = (sk.mpCost && s.mp < sk.mpCost) || (sk.burstCost && s.burst < sk.burstCost);
         const range = this.engine.rtSkillRange(sk);
-        const far = sk.type !== "defense" && sk.type !== "heal" && dist > (range < 2 ? 4.2 : range);
-        cdOf(el, rt.cd[id] || 0, this.engine.rtSkillCd(sk), lack || far);
-        el.classList.toggle("far", !!far && !lack);
+        const far = !!rt && sk.type !== "defense" && sk.type !== "heal" && dist > (range < 2 ? 4.2 : range);
+        cdOf(el, rt ? rt.cd[id] || 0 : 0, this.engine.rtSkillCd(sk), lack || far);
+        el.classList.toggle("far", far && !lack);
         const effType = (id === "slash" || id === "heavy_thrust") && s.weaponElement ? s.weaponElement : sk.type;
-        el.classList.toggle("weak", !!(c.weaknesses && c.weaknesses.includes(effType)) && sk.type !== "defense" && sk.type !== "heal");
+        el.classList.toggle("weak", !!(c && c.weaknesses && c.weaknesses.includes(effType)) && sk.type !== "defense" && sk.type !== "heal");
       } else if (kind === "item") {
         const cnt = s.inventory[id] || 0;
-        cdOf(el, rt.potionCd, 1.2, cnt <= 0);
+        cdOf(el, rt ? rt.potionCd : 0, 1.2, cnt <= 0);
         el.querySelector(".rt-slot-sub").textContent = `x${cnt}`;
       } else if (id === "dodge") {
-        cdOf(el, rt.dodgeCd, 1.0, s.mp < 10);
+        cdOf(el, rt ? rt.dodgeCd : 0, 1.0, !rt || s.mp < 10);
       } else if (id === "comp") {
-        const ch = c.companionCharge || 0;
-        el.querySelector(".rt-slot-sub").textContent = `${ch}%`;
+        const ch = c ? c.companionCharge || 0 : 0;
+        el.querySelector(".rt-slot-sub").textContent = c ? `${ch}%` : "";
         el.classList.toggle("ready", ch >= 100);
-        cdOf(el, 100 - ch, 100, ch < 100);
+        cdOf(el, 100 - ch, 100, !c || ch < 100);
       } else if (id === "sharpen") {
-        cdOf(el, rt.sharpenCd, 6, false);
+        cdOf(el, rt ? rt.sharpenCd : 0, 6, false);
       } else if (id === "elem") {
         el.querySelector(".rt-slot-sub").textContent = RT_ELEM_NAMES[s.weaponElement || "physical"];
       } else if (id === "auto") {
-        el.classList.toggle("ready", !!rt.auto);
+        el.classList.toggle("ready", !!(rt && rt.auto));
+        el.classList.toggle("off", !c);
       } else if (id === "flee") {
-        el.classList.toggle("off", !!c.isBoss);
+        el.classList.toggle("off", !c || !!c.isBoss);
       }
     }
   },
@@ -235,9 +252,43 @@ const GameUIRT = {
   },
 
   onCombatSkillClick(skillId) {
+    if (!this.engine.combat) return this.onFieldSkill(skillId);
     const res = this.engine.executeSkill(skillId);
     if (!res.ok && res.msg) this.showToast(res.msg, "warn");
     if (!this.engine.combat) this.renderAll();
+  },
+
+  // 探索中使用技能列：治療技能可直接施放，其餘技能揮出劍氣示意 (不消耗資源)
+  onFieldSkill(skillId) {
+    const sk = this.engine.data.skills[skillId];
+    if (!sk) return;
+    if (sk.type === "heal") {
+      const res = this.engine.castFieldHeal(skillId);
+      if (!res.ok && res.msg) this.showToast(res.msg, "warn");
+      this.renderAll();
+      return;
+    }
+    this._swing = { ticks: 14, max: 14, color: RT_ELEM_COLORS[sk.type === "ultimate" ? "ultimate" : sk.type] || "#e2e8f0" };
+    if (window.soundSystem) window.soundSystem.sfx("slash");
+    if (!this._swingToastAt || performance.now() - this._swingToastAt > 6000) {
+      this._swingToastAt = performance.now();
+      this.showToast("靠近魔物即自動開戰，戰技在戰鬥中才會生效", "teal");
+    }
+  },
+
+  drawFieldSwing(ctx, hx, hy, ts) {
+    const sw = this._swing;
+    if (!sw || sw.ticks <= 0) return;
+    const prog = 1 - sw.ticks / sw.max;
+    ctx.save();
+    ctx.strokeStyle = sw.color;
+    ctx.globalAlpha = 1 - prog;
+    ctx.lineWidth = 5 - prog * 3;
+    ctx.beginPath();
+    ctx.arc(hx + ts / 2, hy + ts / 2, ts * (0.5 + prog * 0.5), -2.2 + prog * 1.4, -0.4 + prog * 1.4);
+    ctx.stroke();
+    ctx.restore();
+    sw.ticks--;
   },
 
   onUseItemClick(itemId) {
@@ -278,6 +329,21 @@ const GameUIRT = {
     }
     e.preventDefault();
     return true;
+  },
+
+  // 探索中的技能列快捷鍵 (1~9、Space)：回傳 true 表示已處理
+  handleFieldSkillKey(e) {
+    if (e.repeat) return false;
+    if (e.key === " ") {
+      this.onCombatSkillClick("slash");
+      return true;
+    }
+    const idx = parseInt(e.key, 10) - 1;
+    if (idx >= 0 && idx < this.engine.state.unlockedSkills.length) {
+      this.onCombatSkillClick(this.engine.state.unlockedSkills[idx]);
+      return true;
+    }
+    return false;
   },
 
   handleCombatKeyUp(e) {

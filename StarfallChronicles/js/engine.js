@@ -3123,6 +3123,20 @@ class StarfallEngine {
     return { ok: true, element: nextElem, label };
   }
 
+  // 探索中施放治療技能 (技能列常駐，平時可補血)
+  castFieldHeal(skillId) {
+    const sk = this.data.skills[skillId];
+    if (!sk || sk.type !== "heal") return { ok: false };
+    if (this.state.hp >= this.state.maxHp) return { ok: false, msg: "生命值已滿" };
+    if (sk.mpCost && this.state.mp < sk.mpCost) return { ok: false, msg: "星力(MP)不足！" };
+    this.state.mp -= sk.mpCost || 0;
+    const healAmt = Math.round(this.state.maxHp * 0.38);
+    this.state.hp = Math.min(this.state.maxHp, this.state.hp + healAmt);
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
+    this.log(`[星輝治療] 施展【${sk.name}】，恢復 ${healAmt} HP。`, "success");
+    return { ok: true };
+  }
+
   getCurrentIntent() {
     if (!this.combat) return null;
     if (this.combat.brokenThisTurn) {
