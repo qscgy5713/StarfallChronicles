@@ -55,3 +55,22 @@
   - [x] 戰鬥舞台 (`drawBattleScene`) 多層次章節遠景剪影、透視地坪、敵方韌性護盾光罩與五屬性專屬彈道/交叉斬擊特效
 - [x] 於 `StarfallChronicles/css/style.css` 升級 16-Bit 皇家星盤金屬浮雕邊框、分段高光計量條與介面視覺質感
 - [x] 執行 `StarfallChronicles/tests/test_game.js` 自動化測試與自我 Code Review，同步更新文件
+
+## 第五階段：《魔物獵人》風格 3D 狩獵紀元全面升級
+- [x] 建立零依賴 3D 透視渲染與多部位狩獵引擎 `StarfallChronicles/js/mh3d.js`：
+  - [x] 實作 3D 越肩狩獵視角 (`3d_shoulder`，預設)、3D 廣角戰術視角 (`3d_orbit`) 與 2D 經典像素視角 (`2d_pixel`) 一鍵切換 (`[V]` 鍵)
+  - [x] 實作 3D 數學透視投影矩陣 (`projectPoint`) 與地面滑鼠射線反向投射尋路 (`screenToWorldTile`)
+  - [x] 繪製 3D 狩獵天幕、章節岩壁、巨木、熔岩裂紋、獵人帳篷烤肉營火與翠綠導蟲 (`Scoutflies`) 立體引導軌跡
+  - [x] 繪製 3D 多部位巨型魔物模型（頭部 Head / 軀幹 Body / 尾巴 Tail 獨立鎖定、破頭裂角與斷尾外觀變化）
+- [x] 升級 `StarfallChronicles/js/engine.js` 實作《魔物獵人》核心狩獵系統：
+  - [x] 武器斬味系統 (紅 ➔ 橙 ➔ 黃 ➔ 綠 ➔ 藍 ➔ 白 ➔ 紫斬 1.38x 傷害加成) 與 `[R]` 砥石磨刀 (恢復紫斬 100 + 2 回合剛刃研磨)
+  - [x] 魔物三部位瞄準鎖定 (`selectMonsterPart`)：頭部破頭氣絕 KO (破盾-2 & 降攻15%)、軀幹胸甲碎裂 (永久易傷)、尾巴斷尾成功 (額外素材與賞金)
+  - [x] 魔物紅蓮憤怒狀態 (`Enraged`)：血量低於 65% 時全身激發赤紅鬥氣
+  - [x] 太刀氣刃計量槽 (無 ➔ 白 ➔ 黃 ➔ 紅刃 +25% 攻擊) 與 `[X]` 見切迴避斬 (`castForesightSlash`：減傷65% + 氣刃大迴旋反擊升階)
+  - [x] 獵人公會星辰貓飯料理亭 (`eatCanteenMeal` / `[G]` 鍵)：攻大、防大、幸運剝取三大貓飯套餐
+- [x] 升級 `StarfallChronicles/js/ui.js` 與 `StarfallChronicles/index.html`：
+  - [x] 串接 3D 世界與 3D 狩獵競技場繪製、`[J]/[L]` 鏡頭旋轉與滑鼠點擊切換魔物部位
+  - [x] 新增頂部與戰鬥快捷列按鈕（`[V] 3D視角切換`、`[R] 砥石磨刀`、`[G] 獵人貓飯`、`[X] 太刀見切斬`）
+  - [x] 實作獵人公會星辰貓飯視窗 (`#modal-canteen`)
+  - [x] 嚴格落實全專案 100% 零 Emoji 規範
+- [x] 擴充並通過 `StarfallChronicles/tests/test_game.js` 全部 9 大自動化測試套件（含 7 大核心檔案 100% 零 Emoji 檢查）

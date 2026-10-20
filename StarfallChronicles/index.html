@@ -12,15 +12,16 @@
     <div class="brand-box" style="cursor: pointer;" title="點擊查看《星隕編年史》世界觀與玩法指南" onclick="window.gameUI.openModal('intro')">
       <span id="brand-px-logo"></span>
       <div>
-        <div class="brand-title">星隕編年史：霧海遺城 (16-Bit Pixel Edition)</div>
-        <div style="font-size: 11px; color: #94a3b8;">Chronicles of Starfall: The Mistbound Citadel v3.0</div>
+        <div class="brand-title">星隕編年史：霧海遺城 (3D 魔物獵人狩獵紀元)</div>
+        <div style="font-size: 11px; color: #94a3b8;">Chronicles of Starfall: Monster Hunter 3D Edition v4.0</div>
       </div>
       <span id="chapter-title" class="chapter-badge">第一章：微光漁村與迷霧森林</span>
     </div>
 
     <div class="top-nav-btns">
       <span style="font-size: 12px; color: #94a3b8; margin-right: 4px;">時長 <strong id="hud-playtime">00:00</strong></span>
-      <button class="nav-btn" onclick="window.gameUI.openModal('intro')"><span id="nav-ic-help"></span>玩法指引</button>
+      <button class="nav-btn" onclick="window.gameUI.openModal('intro')"><span id="nav-ic-help"></span>狩獵指南</button>
+      <button class="nav-btn" onclick="window.gameUI.openModal('canteen')" style="border-color: #f59e0b; color: #fef08a;">[G] 獵人貓飯</button>
       <button class="nav-btn" onclick="window.gameUI.openModal('inventory')"><span id="nav-ic-inv"></span>背包裝備</button>
       <button class="nav-btn" onclick="window.gameUI.openModal('skills')"><span id="nav-ic-skill"></span>技能天賦 (<span id="hud-sp">1 點</span>)</button>
       <button class="nav-btn" onclick="window.gameUI.openModal('craft')"><span id="nav-ic-craft"></span>鍛造工坊</button>
@@ -40,10 +41,16 @@
         <span id="guide-main-text">[區域 1-1] 請前往左上角與【村長奧爾森】對話，領取守林人銅鑰與補給！</span>
       </div>
       <div id="guide-sub-text" class="guide-sub-row">
-        操作提示：使用 WASD / 方向鍵或點擊地圖/右上雷達移動；按 [Q] 星輝脈衝破牆拆陷阱與奇襲；按 [E] 切換武器五屬性附魔；按 [M] 切換 40x28 全景視角
+        操作提示：跟隨翠綠導蟲探索 3D 狩獵場；按 [V] 切換 3D越肩/3D廣角/2D像素；按 [R] 砥石磨刀維持紫斬；按 [G] 享用貓飯；戰鬥中可鎖定【頭部/軀幹/尾巴】進行部位破壞與斷尾！
       </div>
     </div>
-    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button id="btn-toggle-3d" class="guide-auto-btn" style="background: #7c2d12; border-color: #fb923c; color: #ffedd5;" onclick="window.gameUI.onToggle3DViewClick()">
+        [V] 視角：3D越肩狩獵
+      </button>
+      <button id="btn-sharpen" class="guide-auto-btn" style="background: #4c1d95; border-color: #c084fc; color: #f3e8ff;" onclick="window.gameUI.onSharpenWeaponClick()">
+        [R] 砥石磨刀 (紫斬 100)
+      </button>
       <button id="btn-astral-pulse" class="guide-auto-btn" style="background: #0c4a6e; border-color: #38bdf8; color: #e0f2fe;" onclick="window.gameUI.onAstralPulseClick()">
         [Q] 星輝脈衝 (破牆/拆陷阱/奇襲)
       </button>
@@ -131,11 +138,11 @@
       </div>
 
       <div>
-        <div class="panel-section-title"><span>方向鍵控制 (WASD / 點擊地圖)</span></div>
+        <div class="panel-section-title"><span>方向與 3D 鏡頭控制 (WASD / J‧L 旋轉)</span></div>
         <div class="dpad-box">
-          <div></div>
+          <button class="dpad-btn" title="3D 鏡頭向左旋轉 [J]" onclick="window.gameUI.mh3d && window.gameUI.mh3d.rotateCamera(-Math.PI/6)">[J]左旋</button>
           <button class="dpad-btn" onclick="window.gameUI.handleMove(0, -1)">上</button>
-          <div></div>
+          <button class="dpad-btn" title="3D 鏡頭向右旋轉 [L]" onclick="window.gameUI.mh3d && window.gameUI.mh3d.rotateCamera(Math.PI/6)">[L]右旋</button>
           <button class="dpad-btn" onclick="window.gameUI.handleMove(-1, 0)">左</button>
           <button class="dpad-btn" onclick="window.gameUI.handleMove(0, 1)">下</button>
           <button class="dpad-btn" onclick="window.gameUI.handleMove(1, 0)">右</button>
@@ -419,12 +426,51 @@
     </div>
   </div>
 
+  <!-- 11. 《魔物獵人》艾露貓料理長・星辰貓飯料理亭視窗 -->
+  <div id="modal-canteen" class="modal-overlay">
+    <div class="modal-card" style="max-width: 620px;">
+      <div class="modal-header">
+        <h2>獵人公會・艾露貓星辰貓飯料理亭 [G]</h2>
+        <button class="modal-close" onclick="window.gameUI.closeModals()">X</button>
+      </div>
+      <div class="modal-body">
+        <p class="dlg-p" style="color: #fef08a;">
+          「出發狩獵大型魔物前，先吃飽才有力氣揮動大劍與太刀！」（享用貓飯可立即恢復 45% HP/MP、自動磨亮滿額<strong>紫斬</strong>，並獲得持續 4 場狩獵的公會料理增益）
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="inv-card equipped">
+            <div class="inv-card-head">
+              <strong>【勇氣全肉拼盤】獵人攻大貓飯</strong>
+              <button class="btn-sm btn-accent" onclick="window.gameUI.onCanteenMealClick('meat_platter')">享用套餐 (免費)</button>
+            </div>
+            <div class="inv-card-desc">攻擊力 +22%、最大HP +20、暴擊率 +8%、開戰護甲 +15，並立即磨滿【紫斬 100】（持續 4 場狩獵）</div>
+          </div>
+          <div class="inv-card equipped">
+            <div class="inv-card-head">
+              <strong>【深海龍蝦燉鍋】獵人防大貓飯</strong>
+              <button class="btn-sm btn-teal" onclick="window.gameUI.onCanteenMealClick('seafood_stew')">享用套餐 (免費)</button>
+            </div>
+            <div class="inv-card-desc">防禦力 +25%、最大HP +40、開戰護甲 +32、攻擊力 +6%，並立即磨滿【紫斬 100】（持續 4 場狩獵）</div>
+          </div>
+          <div class="inv-card equipped">
+            <div class="inv-card-head">
+              <strong>【黃金星辰起司鍋】激運剝取貓飯</strong>
+              <button class="btn-sm btn-accent" onclick="window.gameUI.onCanteenMealClick('golden_fondue')">享用套餐 (免費)</button>
+            </div>
+            <div class="inv-card-desc">討伐金幣與經驗報酬 +35%、暴擊率 +15%、攻防 +12%，並立即磨滿【紫斬 100】（持續 4 場狩獵）</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container"></div>
 
   <script src="js/pixel_art.js"></script>
   <script src="js/data.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/engine.js"></script>
+  <script src="js/mh3d.js"></script>
   <script src="js/ui.js"></script>
   <script>
     function toggleAudioMute() {

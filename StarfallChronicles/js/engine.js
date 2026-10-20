@@ -69,6 +69,11 @@ class StarfallEngine {
       pulseCooldown: 0,
       pulseVisionSteps: 0,
       weaponElement: "physical",
+      viewMode: "3d_shoulder",
+      sharpness: 100,
+      polishTurns: 0,
+      spiritLevel: 0,
+      canteenMeal: null,
       zoneMasteryClaimed: {},
       fieldBuff: null,
       loreUnlocked: [],
@@ -86,7 +91,10 @@ class StarfallEngine {
         ambushesTriggered: 0,
         combosTriggered: 0,
         reliquariesOpened: 0,
-        perfectCounters: 0
+        perfectCounters: 0,
+        partsBroken: 0,
+        tailsSevered: 0,
+        foresightCounters: 0
       },
       playTimeSeconds: 0,
       exploredByChapter: {}
@@ -161,6 +169,26 @@ class StarfallEngine {
       crit += s.fieldBuff.critBonus || 12;
     }
 
+    // 《魔物獵人》獵人公會星辰貓飯料理增益
+    let mealArmor = 0;
+    if (s.canteenMeal && s.canteenMeal.battlesLeft > 0) {
+      if (s.canteenMeal.atkMult) atk = Math.round(atk * s.canteenMeal.atkMult);
+      if (s.canteenMeal.defMult) def = Math.round(def * s.canteenMeal.defMult);
+      if (s.canteenMeal.maxHpAdd) maxHp += s.canteenMeal.maxHpAdd;
+      if (s.canteenMeal.critAdd) crit += s.canteenMeal.critAdd;
+      if (s.canteenMeal.rewardAdd) rewardMult += s.canteenMeal.rewardAdd;
+      if (s.canteenMeal.startArmor) mealArmor = s.canteenMeal.startArmor;
+    }
+
+    // 《魔物獵人》太刀氣刃計量表加成 (白刃+8%, 黃刃+16%, 紅刃+25%)
+    const spiritMults = [1.0, 1.08, 1.16, 1.25];
+    const spLv = Math.max(0, Math.min(3, s.spiritLevel || 0));
+    atk = Math.round(atk * spiritMults[spLv]);
+
+    if ((s.polishTurns || 0) > 0) {
+      crit += 15;
+    }
+
     return {
       maxHp,
       maxMp,
@@ -168,11 +196,114 @@ class StarfallEngine {
       def,
       crit: Math.min(95, crit),
       mpRegen,
-      startArmor: (t.guardian || 0) * 18 + (s.fieldBuff && s.fieldBuff.battlesLeft > 0 ? 20 : 0),
+      startArmor: (t.guardian || 0) * 18 + (s.fieldBuff && s.fieldBuff.battlesLeft > 0 ? 20 : 0) + mealArmor,
       potionMult: 1 + (t.alchemist || 0) * 0.25,
       vision,
       rewardMult
     };
+  }
+
+  // ==================== 《魔物獵人》斬味系統、砥石研磨、3D視角與貓飯料理亭 ====================
+  getSharpnessTierInfo() {
+    const val = typeof this.state.sharpness === "number" ? this.state.sharpness : 100;
+    if (val >= 90) return { tier: "purple", label: "紫斬", color: "#c084fc", mult: 1.38, partMult: 1.35 };
+    if (val >= 72) return { tier: "white", label: "白斬", color: "#f8fafc", mult: 1.28, partMult: 1.22 };
+    if (val >= 52) return { tier: "blue", label: "藍斬", color: "#38bdf8", mult: 1.18, partMult: 1.12 };
+    if (val >= 32) return { tier: "green", label: "綠斬", color: "#4ade80", mult: 1.05, partMult: 1.0 };
+    if (val >= 16) return { tier: "yellow", label: "黃斬", color: "#facc15", mult: 0.92, partMult: 0.85 };
+    return { tier: "red", label: "紅斬(鈍刀)", color: "#ef4444", mult: 0.68, partMult: 0.6 };
+  }
+
+  sharpenWeapon() {
+    this.state.sharpness = 100;
+    this.state.polishTurns = 2;
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("puzzle");
+    const msg = `[砥石研磨] 使用高速砥石打磨武器！斬味恢復至【100 紫斬 (1.38x 傷害)】並獲得 2 回合【剛刃研磨 (不掉斬味 & 暴擊+15%)】！`;
+    if (this.combat) {
+      this.combat.log.push(msg);
+      this.combat.fx = { text: "SHARPEN! 紫斬 1.38x", color: "#c084fc", ticks: 26 };
+    } else {
+      this.log(msg, "success");
+    }
+    if (typeof window !== "undefined" && window.gameUI) {
+      window.gameUI.showToast("砥石研磨完成！斬味恢復至【紫斬 1.38x】", "gold");
+    }
+    return { ok: true, sharpness: 100, msg };
+  }
+
+  toggleViewMode() {
+    const order = ["3d_shoulder", "3d_orbit", "2d_pixel"];
+    const labels = {
+      "3d_shoulder": "3D 越肩狩獵視角 (Monster Hunter 3D)",
+      "3d_orbit": "3D 廣角戰術視角 (3D Tactical)",
+      "2d_pixel": "2D 經典像素視角 (Classic 16-Bit)"
+    };
+    const cur = this.state.viewMode || "3d_shoulder";
+    const next = order[(order.indexOf(cur) + 1) % order.length];
+    this.state.viewMode = next;
+    if (next !== "2d_pixel") {
+      this.state.fullMapView = false;
+    }
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("click");
+    this.log(`[視角切換] 已切換為【${labels[next]}】。`, "info");
+    if (typeof window !== "undefined" && window.gameUI) {
+      window.gameUI.showToast(`切換視角：${labels[next]}`, "teal");
+    }
+    return { ok: true, viewMode: next, label: labels[next] };
+  }
+
+  eatCanteenMeal(mealId = "meat_platter") {
+    const meals = {
+      meat_platter: {
+        id: "meat_platter",
+        name: "勇氣全肉拼盤(攻大)",
+        atkMult: 1.22,
+        defMult: 1.05,
+        maxHpAdd: 20,
+        critAdd: 8,
+        rewardAdd: 0,
+        startArmor: 15,
+        battlesLeft: 4,
+        desc: "攻擊力+22%、最大HP+20、暴擊+8%（持續 4 場狩獵）"
+      },
+      seafood_stew: {
+        id: "seafood_stew",
+        name: "深海龍蝦燉鍋(防大)",
+        atkMult: 1.06,
+        defMult: 1.25,
+        maxHpAdd: 40,
+        critAdd: 5,
+        rewardAdd: 0,
+        startArmor: 32,
+        battlesLeft: 4,
+        desc: "防禦力+25%、最大HP+40、開戰護甲+32（持續 4 場狩獵）"
+      },
+      golden_fondue: {
+        id: "golden_fondue",
+        name: "黃金星辰起司鍋(幸運)",
+        atkMult: 1.12,
+        defMult: 1.12,
+        maxHpAdd: 25,
+        critAdd: 15,
+        rewardAdd: 0.35,
+        startArmor: 18,
+        battlesLeft: 4,
+        desc: "討伐報酬金幣與經驗+35%、暴擊率+15%、攻防+12%（持續 4 場狩獵）"
+      }
+    };
+    const meal = meals[mealId] || meals.meat_platter;
+    this.state.canteenMeal = { ...meal };
+    this.state.sharpness = 100;
+    this.recalcStats(false);
+    this.state.hp = Math.min(this.state.maxHp, this.state.hp + Math.round(this.state.maxHp * 0.45));
+    this.state.mp = Math.min(this.state.maxMp, this.state.mp + Math.round(this.state.maxMp * 0.45));
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
+    const msg = `[艾露貓料理長] 享用【${meal.name}】！${meal.desc}，並恢復 45% 體力與滿額紫斬！`;
+    this.log(msg, "achievement");
+    if (typeof window !== "undefined" && window.gameUI) {
+      window.gameUI.showToast(`貓飯料理完成：【${meal.name}】！`, "gold");
+    }
+    return { ok: true, meal, msg };
   }
 
   recalcStats(fullHeal = false) {
@@ -2012,12 +2143,13 @@ class StarfallEngine {
 
     if (tile === "F") {
       this.recalcStats(true);
+      this.state.sharpness = 100;
       this.saveGame(0);
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
-      this.log("[營火休息] 生命值與星力已完全恢復，並完成了自動存檔。", "success");
+      this.log("[營火休息] 生命值、星力與武器斬味已完全恢復，並完成了自動存檔（可按 [G] 享用貓飯）。", "success");
       if (typeof window !== "undefined" && window.gameUI) {
-        window.gameUI.showToast("[營火休憩] HP/MP 全滿 & 已自動存檔", "teal");
-        if (window.gameUI.addMapFloatText) window.gameUI.addMapFloatText(x, y, "HP/MP 全滿!", "#4ade80");
+        window.gameUI.showToast("[營火休憩] HP/MP/紫斬 全滿 & 已自動存檔 (按 [G] 貓飯)", "teal");
+        if (window.gameUI.addMapFloatText) window.gameUI.addMapFloatText(x, y, "HP/MP/紫斬 全滿!", "#4ade80");
       }
       return;
     }
@@ -2824,12 +2956,41 @@ class StarfallEngine {
       enemyMaxShield: template.shield,
       brokenThisTurn: false,
       phase2Triggered: false,
+      enraged: false,
       phase2Text: template.phase2Text || null,
       turn: 1,
       intentIndex: 0,
       intents: template.intents,
       playerArmor: comp.startArmor,
       playerGuarding: false,
+      foresightStance: false,
+      targetPart: "body",
+      parts: {
+        head: {
+          key: "head",
+          name: "頭部",
+          hp: Math.max(28, Math.round(maxHp * 0.34)),
+          maxHp: Math.max(28, Math.round(maxHp * 0.34)),
+          broken: false,
+          desc: "破頭可觸發【氣絕KO!】直接粉碎 2 點護盾並降低魔物 15% 攻擊力"
+        },
+        body: {
+          key: "body",
+          name: "軀幹",
+          hp: Math.max(35, Math.round(maxHp * 0.42)),
+          maxHp: Math.max(35, Math.round(maxHp * 0.42)),
+          broken: false,
+          desc: "弱點肉質(+15%傷害)，破壞胸甲可使魔物陷入 3 回合【易傷+30%】"
+        },
+        tail: {
+          key: "tail",
+          name: "尾巴",
+          hp: Math.max(26, Math.round(maxHp * 0.32)),
+          maxHp: Math.max(26, Math.round(maxHp * 0.32)),
+          broken: false,
+          desc: "斬擊累積可觸發【斷尾成功!】立即剝取額外稀有魔物素材與金幣"
+        }
+      },
       playerStatuses: { burn: 0, weaken: 0, vuln: 0, regen: 0 },
       enemyStatuses: { burn: 0, weaken: 0, vuln: 0, atkBuff: 0 },
       lastElement: null,
@@ -2844,6 +3005,40 @@ class StarfallEngine {
     if (typeof window !== "undefined" && window.soundSystem) {
       window.soundSystem.startBGM(template.isBoss || template.isElite ? "boss" : "combat", this.state.chapter);
     }
+  }
+
+  // 《魔物獵人》切換魔物鎖定部位 (head: 頭部 / body: 軀幹 / tail: 尾巴)
+  selectMonsterPart(partKey) {
+    if (!this.combat || !this.combat.parts || !this.combat.parts[partKey]) return { ok: false };
+    this.combat.targetPart = partKey;
+    const p = this.combat.parts[partKey];
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("click");
+    const msg = `[部位鎖定] 準星已鎖定魔物【${p.name}】（${p.desc}）！`;
+    this.combat.log.push(msg);
+    if (typeof window !== "undefined" && window.gameUI) {
+      window.gameUI.showToast(`[部位鎖定] 已瞄準：【${p.name}】`, "teal");
+    }
+    return { ok: true, part: partKey, info: p };
+  }
+
+  // 《魔物獵人》太刀「見切斬 / 緊急翻滾迴避」 ([X] 鍵觸發：閃避減傷 65% + 居合氣刃大迴旋反擊升階氣刃)
+  castForesightSlash() {
+    if (!this.combat) return { ok: false, msg: "僅能在狩獵戰鬥中施展見切迴避！" };
+    const mpCost = 10;
+    if (this.state.mp >= mpCost) {
+      this.state.mp -= mpCost;
+    }
+    this.combat.foresightStance = true;
+    this.combat.playerGuarding = true;
+    const armorGain = Math.round(this.state.maxHp * 0.16);
+    this.combat.playerArmor += armorGain;
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("slash");
+    this.combat.fx = { text: "見切構え! FORESIGHT", color: "#38bdf8", ticks: 26 };
+    this.combat.log.push(
+      `[太刀見切] 你擺出【見切迴避姿態】(獲得 +${armorGain} 護甲)，本回合受到魔物攻擊時將觸發無敵翻滾與【氣刃大迴旋】反擊並提升氣刃階段！`
+    );
+    this.enemyTurn();
+    return { ok: true, combatEnded: !this.combat };
   }
 
   // 星靈夥伴主動協同大招 ([C] 鍵施放，不消耗玩家出招回合)
@@ -2937,6 +3132,10 @@ class StarfallEngine {
   autoBattleStep() {
     if (!this.combat) return { ok: false };
     const s = this.state;
+    // 斬味降至黃斬或鈍刀 (<32) 且無剛刃研磨時，優先以砥石磨刀恢復滿額紫斬
+    if ((s.polishTurns || 0) <= 0 && (typeof s.sharpness === "number" ? s.sharpness : 100) < 32) {
+      return this.sharpenWeapon();
+    }
     if (s.hp < s.maxHp * 0.4) {
       if (s.unlockedSkills.includes("starlight_mend") && s.mp >= 24) {
         return this.executeSkill("starlight_mend");
@@ -3093,6 +3292,15 @@ class StarfallEngine {
       const enemyDefFactor = effectiveType === "void" ? this.combat.enemyDef * 0.3 : this.combat.enemyDef * 0.6;
       let dmg = Math.max(6, atkVal - enemyDefFactor);
 
+      // 《魔物獵人》斬味傷害倍率與鎖定部位肉質加成
+      const sharpInfo = this.getSharpnessTierInfo();
+      dmg *= sharpInfo.mult;
+
+      const tPartKey = this.combat.targetPart || "body";
+      if (tPartKey === "body") dmg *= 1.15;
+      else if (tPartKey === "head") dmg *= 1.08;
+      else if (tPartKey === "tail") dmg *= 1.05;
+
       if (isWeakness) dmg *= 1.25;
       if (comboName) dmg *= comboMult;
       if (sk.id === "magma_eruption" && this.combat.enemyStatuses.burn > 0) dmg *= 1.25;
@@ -3104,12 +3312,68 @@ class StarfallEngine {
 
       dmg = Math.round(dmg);
       this.combat.enemyHp = Math.max(0, this.combat.enemyHp - dmg);
+
+      // 消耗武器斬味（若處於剛刃研磨狀態則不消耗）
+      if ((this.state.polishTurns || 0) > 0) {
+        this.state.polishTurns--;
+      } else {
+        this.state.sharpness = Math.max(8, (typeof this.state.sharpness === "number" ? this.state.sharpness : 100) - 5);
+      }
+
+      // 部位傷害累積與《魔物獵人》部位破壞 / 斷尾判定
+      let partBreakTag = "";
+      if (this.combat.parts && this.combat.parts[tPartKey]) {
+        const pObj = this.combat.parts[tPartKey];
+        if (!pObj.broken) {
+          const partDmg = Math.round(dmg * (sharpInfo.partMult || 1.15));
+          pObj.hp = Math.max(0, pObj.hp - partDmg);
+          if (pObj.hp === 0) {
+            pObj.broken = true;
+            this.state.stats.partsBroken = (this.state.stats.partsBroken || 0) + 1;
+            if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("break");
+            if (tPartKey === "head") {
+              partBreakTag = " [破頭KO!]";
+              this.damageEnemyShield(2);
+              this.combat.enemyAtk = Math.max(8, Math.round(this.combat.enemyAtk * 0.85));
+              this.state.gold += 45;
+              this.combat.log.push(
+                `[部位破壞：破頭氣絕 KO!] 成功擊碎 ${this.combat.name} 的【頭部龍角】！額外粉碎 2 點韌性護盾、敵方攻擊力永久降低 15%，並獲得破頭賞金 +45G！`
+              );
+            } else if (tPartKey === "body") {
+              partBreakTag = " [胸甲破壞!]";
+              this.combat.enemyStatuses.vuln = (this.combat.enemyStatuses.vuln || 0) + 3;
+              const bonusBreakDmg = Math.max(15, Math.round(this.combat.enemyMaxHp * 0.1));
+              this.combat.enemyHp = Math.max(0, this.combat.enemyHp - bonusBreakDmg);
+              this.combat.log.push(
+                `[部位破壞：胸甲碎裂!] 貫穿 ${this.combat.name} 的【核心胸甲】！追加 ${bonusBreakDmg} 點部位崩壞傷害，並使其陷入 3 回合【易傷】！`
+              );
+            } else if (tPartKey === "tail") {
+              partBreakTag = " [斷尾成功!]";
+              this.state.stats.tailsSevered = (this.state.stats.tailsSevered || 0) + 1;
+              const tailLootId = this.state.chapter >= 3 ? "meteor_iron" : "star_shard";
+              this.addItem(tailLootId, 1);
+              this.state.gold += 60;
+              const lootName = this.data.items[tailLootId] ? this.data.items[tailLootId].name : "星辰碎晶";
+              this.combat.log.push(
+                `[斷尾成功 TAIL SEVERED!] 你一劍斬斷了 ${this.combat.name} 的【尾巴】！立即剝取稀有素材【${lootName} x1】與斷尾賞金 +60G！`
+              );
+            }
+          }
+        }
+      }
+
+      // 魔物血量低於 65% 時進入《魔物獵人》紅蓮憤怒狀態 (Enrage)
+      if (!this.combat.enraged && this.combat.enemyHp > 0 && this.combat.enemyHp <= this.combat.enemyMaxHp * 0.65) {
+        this.combat.enraged = true;
+        this.combat.log.push(`[魔物憤怒 ENRAGED!] ${this.combat.name} 發出震耳咆哮進入【紅蓮憤怒狀態】，全身散發赤紅鬥氣（部位破壞傷害提升）！`);
+      }
+
       this.combat.shake = 14;
       this.combat.slashAnim = 16;
       this.combat.projAnim = { type: effectiveType, ticks: 16 };
       this.combat.fx = {
-        text: `${comboName ? `[${comboName}] ` : ""}${isWeakness ? "WEAK! " : ""}${isCrit ? "CRIT " : ""}-${dmg}${brokeNow ? " BREAK!" : ""}`,
-        color: comboName ? "#c084fc" : isWeakness ? "#fb923c" : isCrit ? "#facc15" : "#38bdf8",
+        text: `${comboName ? `[${comboName}] ` : ""}${isWeakness ? "WEAK! " : ""}${isCrit ? "CRIT " : ""}-${dmg}${brokeNow ? " BREAK!" : ""}${partBreakTag}`,
+        color: partBreakTag ? "#facc15" : comboName ? "#c084fc" : isWeakness ? "#fb923c" : isCrit ? "#facc15" : "#38bdf8",
         ticks: 30
       };
 
@@ -3236,7 +3500,8 @@ class StarfallEngine {
 
         let dmg = Math.max(4, raw - comp.def * 0.65);
         if (c.playerStatuses.vuln > 0) dmg *= 1.3;
-        if (c.playerGuarding) dmg *= 0.55;
+        if (c.foresightStance) dmg *= 0.35;
+        else if (c.playerGuarding) dmg *= 0.55;
         dmg = Math.round(dmg);
 
         let blocked = 0;
@@ -3260,8 +3525,30 @@ class StarfallEngine {
           c.log.push(`[負面狀態] 你陷入了【${dNames[intent.debuff]}】狀態！`);
         }
 
-        // 完美星紋防禦反擊 (Perfect Guard Counter)：防禦狀態下成功架開敵方強擊或蓄力一擊時觸發反擊破盾
-        if (this.state.hp > 0 && c.playerGuarding && isHeavyOrBuffed) {
+        // 《魔物獵人》太刀「見切斬 -> 氣刃大迴旋」反擊與氣刃升階
+        if (this.state.hp > 0 && c.foresightStance) {
+          c.foresightStance = false;
+          const prevSp = this.state.spiritLevel || 0;
+          this.state.spiritLevel = Math.min(3, prevSp + 1);
+          this.recalcStats(false);
+          const spNames = ["無色刃", "白刃(+8%攻)", "黃刃(+16%攻)", "紅刃極意(+25%攻)"];
+          const counterDmg = Math.max(14, Math.round(this.getComputedStats().atk * 1.22));
+          c.enemyHp = Math.max(0, c.enemyHp - counterDmg);
+          this.damageEnemyShield(1);
+          this.state.burst = Math.min(100, this.state.burst + 22);
+          this.state.stats.foresightCounters = (this.state.stats.foresightCounters || 0) + 1;
+          c.fx = { text: `氣刃大迴旋! -${counterDmg} [${spNames[this.state.spiritLevel]}]`, color: "#f43f5e", ticks: 32 };
+          c.shake = 16;
+          c.slashAnim = 16;
+          if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("burst");
+          c.log.push(
+            `[太刀見切成功!] 你看破魔物攻勢翻滾閃避，順勢施展【氣刃大迴旋】造成 ${counterDmg} 點反擊傷害、擊碎 1 點護盾，太刀氣刃升階至【${spNames[this.state.spiritLevel]}】！`
+          );
+          if (c.enemyHp <= 0) {
+            this.winCombat();
+            return;
+          }
+        } else if (this.state.hp > 0 && c.playerGuarding && isHeavyOrBuffed) {
           const counterDmg = Math.max(10, Math.round(comp.atk * 1.05));
           c.enemyHp = Math.max(0, c.enemyHp - counterDmg);
           this.damageEnemyShield(1);
@@ -3280,6 +3567,12 @@ class StarfallEngine {
         }
       }
       c.intentIndex = (c.intentIndex + 1) % c.intents.length;
+    }
+
+    // 若本回合見切架勢未被魔物攻擊觸發，隨回合結束正常收招
+    if (c.foresightStance) {
+      c.foresightStance = false;
+      c.log.push(`[見切收招] 魔物本回合未發動直接攻擊，太刀見切架勢隨回合結束收招。`);
     }
 
     if (c.enemyStatuses.weaken > 0) c.enemyStatuses.weaken--;
@@ -3367,6 +3660,7 @@ class StarfallEngine {
     this.checkMilestoneAchievements();
 
     const isFinalBoss = c.isFinalBoss;
+    const isBossOrElite = !!(c.isBoss || c.isElite);
     const enemyName = c.name;
     this.combat = null;
 
@@ -3376,6 +3670,18 @@ class StarfallEngine {
         this.state.fieldBuff = null;
         this.recalcStats(false);
       }
+    }
+
+    if (this.state.canteenMeal && this.state.canteenMeal.battlesLeft > 0) {
+      this.state.canteenMeal.battlesLeft--;
+      if (this.state.canteenMeal.battlesLeft <= 0) {
+        this.state.canteenMeal = null;
+        this.recalcStats(false);
+      }
+    }
+
+    if (typeof window !== "undefined" && window.gameUI && window.gameUI.mh3d) {
+      window.gameUI.mh3d.triggerQuestClearStamp(enemyName, isBossOrElite);
     }
 
     if (typeof window !== "undefined" && window.soundSystem) {
@@ -3479,7 +3785,15 @@ class StarfallEngine {
     if (typeof this.state.pulseVisionSteps !== "number") this.state.pulseVisionSteps = 0;
     if (!this.state.weaponElement) this.state.weaponElement = "physical";
     if (!this.state.zoneMasteryClaimed) this.state.zoneMasteryClaimed = {};
+    if (!this.state.viewMode) this.state.viewMode = "3d_shoulder";
+    if (typeof this.state.sharpness !== "number") this.state.sharpness = 100;
+    if (typeof this.state.polishTurns !== "number") this.state.polishTurns = 0;
+    if (typeof this.state.spiritLevel !== "number") this.state.spiritLevel = 0;
+    if (this.state.canteenMeal === undefined) this.state.canteenMeal = null;
     if (!this.state.stats) this.state.stats = {};
+    if (typeof this.state.stats.partsBroken !== "number") this.state.stats.partsBroken = 0;
+    if (typeof this.state.stats.tailsSevered !== "number") this.state.stats.tailsSevered = 0;
+    if (typeof this.state.stats.foresightCounters !== "number") this.state.stats.foresightCounters = 0;
 
     if (this.state.inAbyss) {
       if (parsed.abyssSnapshot && parsed.abyssSnapshot.activeMap) {

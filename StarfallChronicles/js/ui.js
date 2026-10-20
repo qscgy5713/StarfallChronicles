@@ -21,6 +21,7 @@ class GameUI {
     this.mapFloats = [];
     this.hoverTile = null;
     this.autoWalkTimer = null;
+    this.mh3d = typeof window !== "undefined" && window.MH3DRenderer ? new window.MH3DRenderer(this) : null;
 
     this.setupRetinaCanvas();
     this.initStaticPixelIcons();
@@ -383,6 +384,42 @@ class GameUI {
     this.renderAll();
   }
 
+  onToggle3DViewClick() {
+    if (this.engine.toggleViewMode) {
+      this.engine.toggleViewMode();
+    }
+    this.renderAll();
+  }
+
+  onSharpenWeaponClick() {
+    if (this.engine.sharpenWeapon) {
+      this.engine.sharpenWeapon();
+    }
+    this.renderAll();
+  }
+
+  onCanteenMealClick(mealId) {
+    if (this.engine.eatCanteenMeal) {
+      this.engine.eatCanteenMeal(mealId);
+    }
+    this.closeModals();
+    this.renderAll();
+  }
+
+  onSelectMonsterPartClick(partKey) {
+    if (this.engine.selectMonsterPart) {
+      this.engine.selectMonsterPart(partKey);
+    }
+    this.renderAll();
+  }
+
+  onForesightSlashClick() {
+    if (this.engine.castForesightSlash) {
+      this.engine.castForesightSlash();
+    }
+    this.renderAll();
+  }
+
   screenToTile(clientX, clientY) {
     if (!this.canvas || !this.engine.activeMap || !this.engine.activeMap.length) return { tx: -1, ty: -1 };
     const rect = this.canvas.getBoundingClientRect();
@@ -407,6 +444,14 @@ class GameUI {
           ty: Math.floor((ly - mmY) / mmScale),
           fromMinimap: true
         };
+      }
+    }
+
+    const is3D = !this.engine.state.fullMapView && (this.engine.state.viewMode || "3d_shoulder") !== "2d_pixel";
+    if (is3D && this.mh3d) {
+      const hit = this.mh3d.screenToWorldTile(lx, ly, this.logicalWidth, this.logicalHeight);
+      if (hit) {
+        return { tx: hit.tx, ty: hit.ty, fromMinimap: false };
       }
     }
 
@@ -456,10 +501,44 @@ class GameUI {
         return;
       }
 
+      if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        this.onSharpenWeaponClick();
+        return;
+      }
+
+      if (e.key === "v" || e.key === "V") {
+        e.preventDefault();
+        this.onToggle3DViewClick();
+        return;
+      }
+
+      if (e.key === "g" || e.key === "G") {
+        e.preventDefault();
+        this.openModal("canteen");
+        return;
+      }
+
+      if (this.mh3d && (e.key === "j" || e.key === "J")) {
+        e.preventDefault();
+        this.mh3d.rotateCamera(-Math.PI / 6);
+        return;
+      }
+      if (this.mh3d && (e.key === "l" || e.key === "L")) {
+        e.preventDefault();
+        this.mh3d.rotateCamera(Math.PI / 6);
+        return;
+      }
+
       if (this.engine.combat) {
         if (e.key === "c" || e.key === "C") {
           e.preventDefault();
           this.onCompanionSkillClick();
+          return;
+        }
+        if (e.key === "x" || e.key === "X") {
+          e.preventDefault();
+          this.onForesightSlashClick();
           return;
         }
         const idx = parseInt(e.key, 10) - 1;
@@ -495,6 +574,16 @@ class GameUI {
         this.handleMove(dx, dy);
       }
     });
+
+    if (this.battleCanvas) {
+      this.battleCanvas.addEventListener("click", e => {
+        if (!this.engine.combat || !this.mh3d) return;
+        const rect = this.battleCanvas.getBoundingClientRect();
+        const lx = (e.clientX - rect.left) * (this.battleCanvas.width / rect.width);
+        const ly = (e.clientY - rect.top) * (this.battleCanvas.height / rect.height);
+        this.mh3d.handleBattleCanvasClick(lx, ly);
+      });
+    }
 
     if (this.canvas) {
       this.canvas.addEventListener("mousemove", e => {
@@ -574,7 +663,10 @@ class GameUI {
   }
 
   handleMove(dx, dy) {
-    this.engine.move(dx, dy);
+    const res = this.engine.move(dx, dy);
+    if (res && (res.zoneChanged || res.portal) && this.mh3d) {
+      this.mh3d.snapCamera();
+    }
     this.renderAll();
   }
 
@@ -604,6 +696,15 @@ class GameUI {
     const expMap = this.engine.getCurrentExploredMap();
     const comp = this.engine.getComputedStats();
     const frame2 = Math.floor(this.animFrame / 22) % 2;
+    const obj = this.engine.getCurrentObjective();
+
+    // 若處於《魔物獵人》3D 狩獵視角 (3d_shoulder 或 3d_orbit) 且非全景地圖，使用 MH3DRenderer 繪製 3D 透視世界
+    const viewMode = this.engine.state.viewMode || "3d_shoulder";
+    if (!this.engine.state.fullMapView && viewMode !== "2d_pixel" && this.mh3d) {
+      this.mh3d.draw3DWorld(ctx, this.logicalWidth, this.logicalHeight, this.animFrame);
+      this.drawMinimap(ctx, map, expMap, obj, ts);
+      return;
+    }
 
     // 計算鏡頭平移 (Camera Offset)
     if (this.engine.state.fullMapView) {
@@ -1051,6 +1152,12 @@ class GameUI {
     const c = this.engine.combat;
     const w = this.battleCanvas.width;
     const h = this.battleCanvas.height;
+
+    if (this.mh3d && (this.engine.state.viewMode || "3d_shoulder") !== "2d_pixel") {
+      this.mh3d.draw3DBattleScene(ctx, w, h, this.animFrame);
+      return;
+    }
+
     const frame2 = Math.floor(this.animFrame / 20) % 2;
     const chNum = this.engine.state.chapter || 1;
     const horizonY = h - 48;
@@ -1239,6 +1346,21 @@ class GameUI {
       const elemMap = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
       const curE = this.engine.state.weaponElement || "physical";
       elemBtn.textContent = `[E] 武器附魔：${elemMap[curE] || curE}`;
+    }
+    const mode3dBtn = document.getElementById("btn-toggle-3d");
+    if (mode3dBtn) {
+      const vm = this.engine.state.viewMode || "3d_shoulder";
+      const vmNames = {
+        "3d_shoulder": "3D越肩狩獵",
+        "3d_orbit": "3D廣角戰術",
+        "2d_pixel": "2D經典像素"
+      };
+      mode3dBtn.textContent = `[V] 視角：${vmNames[vm] || "3D越肩狩獵"}`;
+    }
+    const sharpenBtn = document.getElementById("btn-sharpen");
+    if (sharpenBtn && this.engine.getSharpnessTierInfo) {
+      const sh = this.engine.getSharpnessTierInfo();
+      sharpenBtn.textContent = `[R] 砥石磨刀 (${sh.label} ${this.engine.state.sharpness ?? 100})`;
     }
   }
 
@@ -1491,6 +1613,9 @@ class GameUI {
 
     const elemNames = { physical: "物理", arcane: "星芒", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空" };
     const eStatusArr = [];
+    if (c.enraged) {
+      eStatusArr.push(`<span class="status-pill burn">[紅蓮憤怒狀態]</span>`);
+    }
     if (c.weaknesses && c.weaknesses.length > 0) {
       const wLabels = c.weaknesses.map(w => elemNames[w] || w).join("/");
       eStatusArr.push(`<span class="status-pill vuln">[弱點屬性: ${wLabels}]</span>`);
@@ -1500,6 +1625,26 @@ class GameUI {
     if (c.enemyStatuses.weaken > 0) eStatusArr.push(`<span class="status-pill weaken">[虛弱 ${c.enemyStatuses.weaken}]</span>`);
     if (c.enemyStatuses.vuln > 0) eStatusArr.push(`<span class="status-pill vuln">[易傷 ${c.enemyStatuses.vuln}]</span>`);
     if (c.enemyStatuses.atkBuff > 0) eStatusArr.push(`<span class="status-pill buff">[蓄力強化]</span>`);
+
+    // 《魔物獵人》三部位破壞鎖定按鈕列 (頭部 / 軀幹 / 尾巴)
+    if (c.parts) {
+      const partBtns = ["head", "body", "tail"]
+        .map(pk => {
+          const p = c.parts[pk];
+          if (!p) return "";
+          const active = (c.targetPart || "body") === pk;
+          const pct = Math.max(0, Math.round((p.hp / p.maxHp) * 100));
+          const statusTxt = p.broken ? "已破壞!" : `${pct}%`;
+          return `<button class="btn-sm ${active ? "btn-accent" : "btn-secondary"}"
+            style="padding:2px 8px;font-size:11px;border-color:${active ? "#facc15" : "#475569"};"
+            title="${p.desc}"
+            onclick="window.gameUI.onSelectMonsterPartClick('${pk}')">
+            [鎖定:${p.name}] ${statusTxt}
+          </button>`;
+        })
+        .join(" ");
+      eStatusArr.push(`<span style="display:inline-flex;gap:4px;align-items:center;margin-left:4px;">${partBtns}</span>`);
+    }
     document.getElementById("combat-enemy-statuses").innerHTML = eStatusArr.join(" ");
 
     const s = this.engine.state;
@@ -1511,6 +1656,17 @@ class GameUI {
 
     const pStatusArr = [];
     if (petObj) pStatusArr.push(`<span class="status-pill regen">${petObj.name.split("・")[1]}同行</span>`);
+    if (this.engine.getSharpnessTierInfo) {
+      const sh = this.engine.getSharpnessTierInfo();
+      pStatusArr.push(`<span class="status-pill buff" style="border-color:${sh.color};color:${sh.color};">[斬味:${sh.label} x${sh.mult}]</span>`);
+    }
+    const spNames = ["無色刃", "白刃+8%", "黃刃+16%", "紅刃+25%"];
+    if ((s.spiritLevel || 0) > 0) {
+      pStatusArr.push(`<span class="status-pill burn">[太刀氣刃:${spNames[s.spiritLevel]}]</span>`);
+    }
+    if (c.foresightStance) {
+      pStatusArr.push(`<span class="status-pill armor">[見切迴避構え!]</span>`);
+    }
     if (c.lastElement) {
       const elemNamesMap = { physical: "物理", star: "星輝", fire: "烈焰", frost: "寒霜", void: "虛空", ultimate: "終極" };
       pStatusArr.push(`<span class="status-pill vuln">[前招:${elemNamesMap[c.lastElement] || c.lastElement} -> 異屬性連攜可觸發!]</span>`);
@@ -1580,9 +1736,13 @@ class GameUI {
       [C] ${compSkillLabel} (${compCharge}%)
     </button>`;
     const elemBtnHtml = `<button class="btn-sm btn-secondary" onclick="window.gameUI.onWeaponElementClick()">[E] 附魔：${elemLabelMap[s.weaponElement || "physical"]}</button>`;
+    const foresightBtnHtml = `<button class="btn-sm btn-teal" onclick="window.gameUI.onForesightSlashClick()" title="閃避減傷65%並發動【氣刃大迴旋】反擊升階太刀氣刃！">[X] 太刀見切斬</button>`;
+    const sharpenBtnHtml = `<button class="btn-sm btn-secondary" onclick="window.gameUI.onSharpenWeaponClick()" title="免費磨刀恢復100紫斬(1.38x傷害)與剛刃研磨">[R] 砥石磨刀</button>`;
     const autoBtnHtml = `<button class="btn-sm btn-teal" onclick="window.gameUI.onAutoBattleClick()">智能出招</button>`;
     itemsRow.innerHTML =
       compBtnHtml +
+      foresightBtnHtml +
+      sharpenBtnHtml +
       elemBtnHtml +
       autoBtnHtml +
       (combatItems.length
@@ -1700,6 +1860,9 @@ class GameUI {
     } else if (type === "save") {
       this.renderSaveModal();
       document.getElementById("modal-save").classList.add("active");
+    } else if (type === "canteen") {
+      const el = document.getElementById("modal-canteen");
+      if (el) el.classList.add("active");
     }
   }
 

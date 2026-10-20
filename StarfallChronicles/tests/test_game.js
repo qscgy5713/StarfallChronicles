@@ -11,9 +11,10 @@ global.window = {};
 const { PixelArtEngine } = require("../js/pixel_art.js");
 require("../js/data.js");
 const { StarfallEngine } = require("../js/engine.js");
+const { MH3DRenderer } = require("../js/mh3d.js");
 
 function runTests() {
-  console.log("=== 開始執行《星隕編年史：霧海遺城 v3.0 Director's Cut》自動化測試 ===");
+  console.log("=== 開始執行《星隕編年史：魔物獵人 3D 狩獵紀元》自動化測試 ===");
 
   // Test 1: 驗證全專案所有程式碼與介面 100% 零 Emoji
   const filesToCheck = [
@@ -22,6 +23,7 @@ function runTests() {
     "../js/pixel_art.js",
     "../js/data.js",
     "../js/engine.js",
+    "../js/mh3d.js",
     "../js/ui.js"
   ];
   const emojiRegex = /\p{Extended_Pictographic}/u;
@@ -31,7 +33,7 @@ function runTests() {
     const match = content.match(emojiRegex);
     assert.strictEqual(match, null, `檔案 ${rel} 不應包含任何 Emoji，但發現: ${match ? match[0] : ""}`);
   });
-  console.log("[PASS] Test 1: 全專案 6 大核心檔案 100% 零 Emoji 檢查通過");
+  console.log("[PASS] Test 1: 全專案 7 大核心檔案 100% 零 Emoji 檢查通過");
 
   // Test 2: 驗證全 5 章 x 3 子區域 (共 15 張 40x28 巨型多翼迷宮地圖) 上所有互動物件 (N, S, G, E, B, C, L, M, R, P, ?, >, <, W, T, D, V, O, U) 皆有精準對應的事件定義
   const engine = new StarfallEngine(global.window.GAME_DATA);
@@ -97,6 +99,12 @@ function runTests() {
   // Test 4: 驗證元素屬性弱點破盾 (+1 額外破盾與 1.25x 弱點傷害)
   game.startCombat({ enemyId: "corrupted_treant" }, "4,3");
   assert.ok(game.combat, "應進入腐化古樹精戰鬥");
+  game.combat.enemyHp = 350;
+  game.combat.enemyMaxHp = 350;
+  if (game.combat.parts) {
+    game.combat.parts.body.hp = 200;
+    game.combat.parts.body.maxHp = 200;
+  }
   // corrupted_treant shield = 3, weaknesses = ['fire', 'star']
   // 使用 star 屬性的 star_bolt (原本 shieldBreak: 2，命中弱點應變成 2+1=3 直接打空 3 點護盾)
   game.executeSkill("star_bolt");
@@ -190,7 +198,86 @@ function runTests() {
   assert.ok((game.state.stats.perfectCounters || 0) > countersBefore, "防禦狀態下承受敵方強擊應觸發【完美星紋防禦反擊】");
   console.log("[PASS] Test 8: 星軌躍遷陣 O、遠古星魂聖棺 U、[E] 武器五屬性附魔與【完美星紋防禦反擊】驗證通過");
 
-  console.log("=== v3.0 Director's Cut 全部自動化測試 100% 通過！ ===");
+  // Test 9: 驗證《魔物獵人》3D 視角投影與核心狩獵系統 (斬味系統、砥石研磨、魔物三部位鎖定破壞與斷尾、太刀見切斬與公會貓飯)
+  const mhGame = new StarfallEngine(global.window.GAME_DATA);
+  assert.strictEqual(mhGame.state.viewMode, "3d_shoulder", "預設視角應為 3D 越肩狩獵視角 (3d_shoulder)");
+
+  // 1. 視角切換循環測試 (3d_shoulder -> 3d_orbit -> 2d_pixel -> 3d_shoulder)
+  const v1 = mhGame.toggleViewMode();
+  assert.strictEqual(v1.viewMode, "3d_orbit", "第一次切換應為 3D 廣角戰術視角 (3d_orbit)");
+  const v2 = mhGame.toggleViewMode();
+  assert.strictEqual(v2.viewMode, "2d_pixel", "第二次切換應為 2D 經典像素視角 (2d_pixel)");
+  const v3 = mhGame.toggleViewMode();
+  assert.strictEqual(v3.viewMode, "3d_shoulder", "第三次切換應回到 3D 越肩狩獵視角 (3d_shoulder)");
+
+  // 2. 武器斬味系統與砥石研磨 [R] 測試
+  assert.strictEqual(mhGame.state.sharpness, 100, "初始斬味應為 100");
+  const sharpInfoInit = mhGame.getSharpnessTierInfo();
+  assert.strictEqual(sharpInfoInit.tier, "purple", "100 斬味應為最高紫斬");
+  assert.strictEqual(sharpInfoInit.mult, 1.38, "紫斬應提供 1.38 倍傷害加成");
+
+  // 模擬戰鬥消耗斬味至綠斬，並使用砥石研磨恢復
+  mhGame.state.sharpness = 45; // green
+  assert.strictEqual(mhGame.getSharpnessTierInfo().tier, "green", "45 斬味應為綠斬");
+  const grindRes = mhGame.sharpenWeapon();
+  assert.strictEqual(grindRes.ok, true, "砥石研磨應成功");
+  assert.strictEqual(mhGame.state.sharpness, 100, "砥石研磨後斬味應恢復至 100 紫斬");
+  assert.strictEqual(mhGame.state.polishTurns, 2, "砥石研磨後應獲得 2 回合剛刃研磨");
+
+  // 3. 獵人公會星辰貓飯料理亭 [G] 測試
+  const mealRes = mhGame.eatCanteenMeal("meat_platter");
+  assert.strictEqual(mealRes.ok, true, "享用勇氣全肉拼盤貓飯應成功");
+  assert.ok(mhGame.state.canteenMeal && mhGame.state.canteenMeal.atkMult === 1.22, "攻大貓飯應提供 +22% 攻擊力增益");
+  assert.strictEqual(mhGame.state.canteenMeal.battlesLeft, 4, "貓飯料理增益應持續 4 場狩獵");
+
+  // 4. 魔物三部位鎖定瞄準與部位破壞 / 斷尾測試
+  mhGame.loadZone(1, 10, 10);
+  mhGame.startCombat({ enemyId: "elite_fenrir" }, "10,10"); // Mini-Boss 芬里爾
+  assert.ok(mhGame.combat.parts.head && mhGame.combat.parts.body && mhGame.combat.parts.tail, "魔物應具備頭部、軀幹與尾巴三部位");
+  assert.strictEqual(mhGame.combat.targetPart, "body", "預設瞄準部位應為軀幹");
+
+  // 切換鎖定瞄準部位為【頭部】並進行破頭擊暈測試
+  const selHead = mhGame.selectMonsterPart("head");
+  assert.strictEqual(selHead.part, "head", "應成功鎖定魔物頭部");
+  mhGame.combat.enemyHp = 2000;
+  mhGame.combat.enemyMaxHp = 2000;
+  mhGame.state.baseAtk = 200; // 足夠傷害擊破部位且不秒殺魔物
+  mhGame.recalcStats(false);
+  const enemyShieldBeforeHeadBreak = mhGame.combat.enemyShield;
+  mhGame.executeSkill("slash"); // 擊破頭部
+  assert.strictEqual(mhGame.combat.parts.head.broken, true, "魔物頭部龍角應被徹底擊碎破壞");
+  assert.ok(mhGame.state.stats.partsBroken >= 1, "部位破壞次數統計應累加");
+  assert.ok(mhGame.combat.enemyShield < enemyShieldBeforeHeadBreak, "破頭應觸發氣絕KO額外削減 2 點護盾");
+
+  // 切換鎖定瞄準部位為【尾巴】並進行斷尾測試
+  mhGame.combat.enemyHp = 2000; // 確保魔物存活繼續測試斷尾
+  const selTail = mhGame.selectMonsterPart("tail");
+  assert.strictEqual(selTail.part, "tail", "應成功鎖定魔物尾巴");
+  const tailsBefore = mhGame.state.stats.tailsSevered || 0;
+  mhGame.executeSkill("slash"); // 斬斷尾巴
+  assert.strictEqual(mhGame.combat.parts.tail.broken, true, "魔物尾巴應被成功斬斷");
+  assert.strictEqual(mhGame.state.stats.tailsSevered, tailsBefore + 1, "斷尾統計次數應累加 1");
+
+  // 5. 太刀見切斬 [X] 迴避減傷與【氣刃大迴旋】氣刃升階測試
+  mhGame.combat.enemyHp = 500;
+  assert.strictEqual(mhGame.state.spiritLevel, 0, "太刀氣刃初始應為 0 (無色刃)");
+  mhGame.combat.intentIndex = 1; // 敵方發動攻擊
+  const foresightRes = mhGame.castForesightSlash();
+  assert.strictEqual(foresightRes.ok, true, "太刀見切斬應成功施展");
+  assert.strictEqual(mhGame.state.spiritLevel, 1, "受到敵方攻擊觸發氣刃大迴旋後，太刀氣刃應升階至 1 (白刃)");
+  assert.ok((mhGame.state.stats.foresightCounters || 0) >= 1, "見切反擊統計應累加");
+
+  // 6. 3D 透視投影與地面射線投射 (Raycast) 測試
+  const mockUI = { engine: mhGame };
+  const renderer = new MH3DRenderer(mockUI);
+  const pProj = renderer.projectPoint(2, 0, 6, renderer.getCameraConfig(), 960, 640);
+  assert.ok(pProj && typeof pProj.sx === "number" && typeof pProj.sy === "number", "3D 座標應成功投影為螢幕 (sx, sy) 像素座標");
+  const rayHit = renderer.screenToWorldTile(480, 480, 960, 640);
+  assert.ok(rayHit && typeof rayHit.tx === "number" && typeof rayHit.ty === "number", "螢幕中心點應成功反向投射至 3D 地面格子 (tx, ty)");
+
+  console.log("[PASS] Test 9: 《魔物獵人》3D 視角投影、斬味砥石、部位破壞斷尾、太刀見切氣刃與公會貓飯驗證通過");
+
+  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 9 大自動化測試 100% 通過！ ===");
 }
 
 runTests();
