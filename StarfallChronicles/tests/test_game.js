@@ -638,8 +638,35 @@ function runTests() {
     r = talk(2);
     assert.ok(r.completed && !sg.state.inventory.star_shard, "第二段消耗物品並完成");
     r = talk(3);
-    assert.ok(r.completed && sg.getStoryState(chain.id).done, "最後一段完成後故事結束");
+    assert.ok(!r.completed && r.choices && r.choices.length === 2 && !sg.getStoryState(chain.id).done, "最後一段先呈現選擇，尚未選擇前故事不結束");
+    assert.ok(dd.storyChains.every(c => { const ch = c.steps[2].choices; return ch && ch.length === 2 && ch.every(x => x.label && x.done.length && x.epilogue); }), "每條故事最後一段有 2 個完整選擇");
+    assert.ok(!sg.resolveStoryChoice(chain.id, 5).ok, "無效選項被拒絕");
+    const gold1 = sg.state.gold;
+    const cr = sg.resolveStoryChoice(chain.id, 1);
+    assert.ok(cr.ok && sg.getStoryState(chain.id).done && sg.state.gold > gold1, "選擇後完成故事並發獎勵（含選擇額外獎勵）");
+    assert.strictEqual(sg.getStoryState(chain.id).choice, "keep");
+    assert.ok(sg.state.flags.story_c1_stardust_keep, "記錄選擇旗標");
+    assert.ok(sg.getStoryEpilogue().length === 1 && sg.getStoryEpilogue()[0].includes("一撮星砂"), "結局後記收錄選擇");
+    assert.ok(!sg.resolveStoryChoice(chain.id, 0).ok, "完成後不可再選");
     assert.ok(sg.state.loreUnlocked.includes("story_lore_1") && sg.state.flags.story_c1_stardust_done, "解鎖專屬手札與旗標");
+    // 旅行者之門：只能回到到過的區域；戰鬥/星淵中不能用
+    const tg = new StarfallEngine(dd);
+    tg.loadChapter(1, true, 1);
+    assert.ok(!tg.travelTo(2, 1).ok, "沒到過的章節不能傳送");
+    tg.loadChapter(2, true, 1);
+    assert.ok(tg.travelTo(1, 1).ok && tg.state.chapter === 1, "可傳送回到過的區域");
+    assert.ok(tg.getTravelOptions().length === 2 && tg.getTravelOptions()[0].zones.some(z => z.visited));
+    tg.startCombat({ enemyId: "mist_wolf" }, "5,5");
+    assert.ok(!tg.travelTo(2, 1).ok, "戰鬥中不能傳送");
+    tg.combat = null;
+    tg.enterAbyss(1);
+    assert.ok(!tg.travelTo(1, 1).ok, "星淵中不能傳送");
+    const old2 = JSON.parse(tg.serialize());
+    delete old2.state.visitedZones;
+    old2.state.chapter = 3; old2.state.subZone = 2; old2.state.inAbyss = false;
+    const tg2 = new StarfallEngine(dd);
+    tg2.deserialize(old2);
+    assert.ok(tg2.state.visitedZones["1-3"] && tg2.state.visitedZones["2-1"] && tg2.state.visitedZones["3-2"] && !tg2.state.visitedZones["3-3"], "舊存檔補齊到過的區域");
     assert.ok(!Object.values((sg.loadZone(3, null, null, false, true), sg.activeEvents)).some(e => e.storyChain === chain.id), "完成後 NPC 不再出現");
     // 劇情場景可閱讀並給予首次獎勵；任務面板資料
     sg.loadZone(1, null, null, false, true);

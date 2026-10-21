@@ -133,6 +133,12 @@ class StoryMixin {
     const st = this.getStoryState(chain.id);
     if (st.done) return { ok: false };
     const step = chain.steps[st.step];
+    const ui = typeof window !== "undefined" ? window.gameUI : null;
+    // 最後一段有選擇：先講完開場，由玩家挑選結局（尚未選擇前故事維持在這一段）
+    if (step.choices && step.req.type === "none") {
+      if (ui && ui.showStoryChoiceModal) ui.showStoryChoiceModal(ev.name, ev.icon, step.offer, step.choices, chain.id);
+      return { ok: true, completed: false, choices: step.choices };
+    }
     let lines = [], rewardText = "";
     if (!st.accepted) {
       st.accepted = true;
@@ -155,24 +161,64 @@ class StoryMixin {
         if (this.state.inventory[step.req.item] <= 0) delete this.state.inventory[step.req.item];
       }
       lines.push(...step.done);
-      rewardText = this._grantReward(step.reward || {});
-      st.step++;
-      st.accepted = false;
-      st.kills = 0;
-      if (st.step >= chain.steps.length) {
-        st.done = true;
-        this.state.flags[`story_${chain.id}_done`] = true;
-        if (chain.lore && !this.state.loreUnlocked.includes(chain.lore)) this.state.loreUnlocked.push(chain.lore);
-        this.log(`[故事完成] 【${chain.title.replace(/^【故事】/, "")}】的故事走到了結尾，新的手札已收入圖鑑。`, "achievement");
-      } else {
-        this.log(`[故事進展] 【${chain.title.replace(/^【故事】/, "")}】：${chain.steps[st.step].name}（${this.state.chapter}-${chain.steps[st.step].zone} 區）在等你。`, "success");
-      }
-      if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("levelup");
-      this.refreshStoryEvents();
-      this.checkMilestoneAchievements();
+      rewardText = this._completeStoryStep(chain, st, step.reward || {});
     }
-    if (typeof window !== "undefined" && window.gameUI) window.gameUI.showDialogueModal(ev.name, ev.icon, lines, rewardText);
+    if (ui) ui.showDialogueModal(ev.name, ev.icon, lines, rewardText);
     return { ok: true, completed, lines, rewardText };
+  }
+
+  // 完成目前這一段：發獎勵、進入下一段（或結束故事並解鎖手札）、刷新地圖上的 NPC
+  _completeStoryStep(chain, st, reward) {
+    const rewardText = this._grantReward(reward);
+    const name = chain.title.replace(/^【故事】/, "");
+    st.step++;
+    st.accepted = false;
+    st.kills = 0;
+    if (st.step >= chain.steps.length) {
+      st.done = true;
+      this.state.flags[`story_${chain.id}_done`] = true;
+      if (chain.lore && !this.state.loreUnlocked.includes(chain.lore)) this.state.loreUnlocked.push(chain.lore);
+      this.log(`[故事完成] 【${name}】的故事走到了結尾，新的手札已收入圖鑑。`, "achievement");
+    } else {
+      this.log(`[故事進展] 【${name}】：${chain.steps[st.step].name}（${this.state.chapter}-${chain.steps[st.step].zone} 區）在等你。`, "success");
+    }
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("levelup");
+    this.refreshStoryEvents();
+    this.checkMilestoneAchievements();
+    return rewardText;
+  }
+
+  // 玩家在故事最後一段做出選擇
+  resolveStoryChoice(chainId, idx) {
+    const chain = (this.data.storyChains || []).find(c => c.id === chainId);
+    if (!chain) return { ok: false, msg: "找不到故事" };
+    const st = this.getStoryState(chain.id);
+    const step = chain.steps[st.step];
+    if (st.done || !step || !step.choices || !step.choices[idx]) return { ok: false, msg: "目前無法做出這個選擇" };
+    const choice = step.choices[idx];
+    const reward = Object.assign({}, step.reward);
+    const extra = choice.reward || {};
+    ["gold", "exp", "sp"].forEach(k => { if (extra[k]) reward[k] = (reward[k] || 0) + extra[k]; });
+    reward.items = Object.assign({}, step.reward && step.reward.items);
+    Object.entries(extra.items || {}).forEach(([id, n]) => { reward.items[id] = (reward.items[id] || 0) + n; });
+    st.choice = choice.id;
+    this.state.flags[`story_${chain.id}_${choice.id}`] = true;
+    const lines = [...choice.done, step.done[step.done.length - 1]];
+    const rewardText = this._completeStoryStep(chain, st, reward);
+    return { ok: true, lines, rewardText, choice };
+  }
+
+  // 通關時「旅途的回聲」：已完成且有選擇的故事所留下的後記
+  getStoryEpilogue() {
+    const out = [];
+    (this.data.storyChains || []).forEach(chain => {
+      const st = this.state.story && this.state.story[chain.id];
+      if (!st || !st.done || !st.choice) return;
+      const last = chain.steps[chain.steps.length - 1];
+      const c = (last.choices || []).find(x => x.id === st.choice);
+      if (c && c.epilogue) out.push(c.epilogue);
+    });
+    return out;
   }
 
   // 任務面板用：本章各條故事的狀態

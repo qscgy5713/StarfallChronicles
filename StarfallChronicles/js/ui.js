@@ -2274,6 +2274,7 @@ class GameUI {
         <div class="ending-badge-lg">${end.badge}</div>
         <h3>${end.title}</h3>
         <p class="ending-story-p">${end.summary}</p>
+        ${this.engine.getStoryEpilogue().length ? `<div class="ending-stats-summary"><div style="grid-column:1/-1;"><strong>旅途的回聲</strong></div>${this.engine.getStoryEpilogue().map(t => `<div style="grid-column:1/-1;">${t}</div>`).join("")}</div>` : ""}
         <div class="ending-stats-summary">
           <div>通關總時長：<strong>${this.formatTime(s.playTimeSeconds)}</strong></div>
           <div>最終等級：<strong>Lv.${s.level}</strong></div>

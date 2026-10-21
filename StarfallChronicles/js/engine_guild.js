@@ -277,6 +277,35 @@ class GuildMixin {
     return { ok: true, quest: q, text: parts.join("、") };
   }
 
+  // ==================== 旅行者之門：回到到過的區域 ====================
+  getTravelOptions() {
+    const visited = this.state.visitedZones || {};
+    const out = [];
+    Object.keys(this.data.chapters).map(Number).sort((a, b) => a - b).forEach(ch => {
+      const chap = this.data.chapters[ch];
+      const zones = Object.keys(chap.zones || {}).map(Number).sort((a, b) => a - b).map(z => ({
+        zone: z,
+        name: chap.zones[z].name || "",
+        visited: !!visited[`${ch}-${z}`],
+        current: this.state.chapter === ch && (this.state.subZone || 1) === z
+      }));
+      if (zones.some(z => z.visited)) out.push({ chapter: ch, chapterName: chap.name, zones, current: this.state.chapter === ch });
+    });
+    return out;
+  }
+
+  travelTo(ch, z) {
+    if (this.combat) return { ok: false, msg: "戰鬥中無法傳送" };
+    if (this.state.inAbyss) return { ok: false, msg: "星淵中無法傳送，請先離開星淵" };
+    if (!(this.state.visitedZones || {})[`${ch}-${z}`]) return { ok: false, msg: "還沒到過那個區域" };
+    const chap = this.data.chapters[ch];
+    if (!chap || !chap.zones || !chap.zones[z]) return { ok: false, msg: "找不到那個區域" };
+    this.loadChapter(ch, true, z);
+    this.saveGame(0);
+    this.log(`[旅行者之門] 你回到了【${ch}-${z}：${chap.zones[z].name}】。`, "chapter");
+    return { ok: true, zoneName: chap.zones[z].name };
+  }
+
   // 擊敗魔物時累計「獵殺」類委託
   _boardOnKill(enemyId) {
     const b = this.getBoardState();

@@ -142,6 +142,7 @@ class StarfallEngine {
       board: { prog: {}, done: [] },
       train: {},
       story: {},
+      visitedZones: {},
       stats: {
         battlesWon: 0,
         shieldsBroken: 0,
@@ -1690,6 +1691,8 @@ class StarfallEngine {
     if (!ch) return;
     const zObj = ch.zones && ch.zones[subZone] ? ch.zones[subZone] : ch;
     this.state.subZone = subZone;
+    if (!this.state.visitedZones) this.state.visitedZones = {};
+    this.state.visitedZones[`${chapterNum}-${subZone}`] = true;
 
     this.activeMap = zObj.map.map(row => row.split(""));
     this.activeEvents = JSON.parse(JSON.stringify(zObj.events));
@@ -3538,6 +3541,12 @@ class StarfallEngine {
     if (!this.state.train) this.state.train = {};
     if (!this.state.story) this.state.story = {};
     this._migrateEnemyRespawn();
+    if (!this.state.visitedZones) {
+      // 舊存檔：已通過的章節視為全區到過，目前章節只算到目前子區域
+      this.state.visitedZones = {};
+      for (let c = 1; c < this.state.chapter; c++) for (let z = 1; z <= 3; z++) this.state.visitedZones[`${c}-${z}`] = true;
+      for (let z = 1; z <= (this.state.subZone || 1); z++) this.state.visitedZones[`${this.state.chapter}-${z}`] = true;
+    }
     if (!this.state.equipUpgrades) this.state.equipUpgrades = { weapon: 0, armor: 0, relic: 0 };
     if (typeof this.state.compassEnabled !== "boolean") this.state.compassEnabled = false;
     if (typeof this.state.fullMapView !== "boolean") this.state.fullMapView = false;

@@ -140,5 +140,37 @@ g.startCombat(be[1], be[0]);
 assert.ok(!g.combat && toasts.some(m => m.includes("尚未認證")));
 ok("未通過認證挑戰首領：不開戰並顯示提示");
 
+// 11 故事最後一段：選擇視窗與按鈕
+g.state.chapter = 1;
+g.state.story = { c1_stardust: { step: 2, accepted: false, kills: 0, done: false } };
+g.loadZone(3, null, null, false, true);
+const fnpc = Object.values(g.activeEvents).find(e => e.storyChain === "c1_stardust");
+assert.ok(fnpc, "最後一段 NPC 在 1-3");
+g.talkStoryNpc(fnpc);
+assert.ok(active("modal-dialogue") && html("dialogue-body").includes("你要怎麼做") && html("dialogue-body").includes("choice-btn"));
+const goldC = g.state.gold;
+click("dialogue-body", "window\\.gameUI\\.onStoryChoice\\('c1_stardust', 0\\)");
+assert.ok(g.getStoryState("c1_stardust").done && g.getStoryState("c1_stardust").choice === "bury" && g.state.gold >= goldC);
+assert.ok(html("dialogue-body").includes("星砂的低語") || html("dialogue-body").includes("手札"), "選擇後顯示結果與手札");
+ok("故事選擇：視窗列出選項，點選後完成故事、記錄選擇並顯示結果");
+
+// 12 旅行者之門分頁
+g.state.visitedZones = { "1-1": true, "1-2": true, "1-3": true, "2-1": true };
+g.loadChapter(2, true, 1);
+ui.openModal("board");
+ui.renderBoardModal("travel");
+assert.ok(html("board-body").includes("旅行者之門") && html("board-body").includes("1-2"));
+click("board-body", "window\\.gameUI\\.onTravel\\(1, 2\\)");
+assert.ok(g.state.chapter === 1 && g.state.subZone === 2, "點擊傳送回 1-2");
+ui.renderBoardModal("travel");
+assert.ok(/disabled[^>]*onclick="window\.gameUI\.onTravel\(1, 2\)"/.test(html("board-body")), "目前所在區域按鈕停用");
+ok("旅行者之門：分頁列出到過的區域，點擊傳送並停用當前區域");
+
+// 13 結局畫面顯示旅途的回聲
+ui.showEndingSelectionModal();
+ui.selectEnding("liberation");
+assert.ok(html("ending-choices-box").includes("旅途的回聲") && html("ending-choices-box").includes("星砂"), "結局畫面列出選擇後記");
+ok("結局畫面：顯示故事選擇留下的「旅途的回聲」");
+
 console.log(`=== UI 互動測試 ${n} 項全部通過 ===`);
 process.exit(0);

@@ -254,6 +254,52 @@
     }
   ];
 
+
+  // 每條故事的最後一段有兩個選擇：結果台詞、額外獎勵，以及通關時「旅途的回聲」裡的一句後記
+  const choices = {
+    c1_stardust: [
+      { id: "bury", label: "把星砂埋在古樹下，讓它安息", done: ["你把星砂埋進古樹的根旁。光塵滲入大地，樹葉沙沙作響，像是在道謝。"], reward: { items: { healing_potion: 3 } }, epilogue: "你把微光的星砂埋在古樹下，漁村的孩子說，那棵樹每逢滿潮夜會發光。" },
+      { id: "keep", label: "留下一小撮星砂，帶著它旅行", done: ["你只埋下大半，留下一撮收進墜飾。它在你胸口微微發熱，像一顆小小的心跳。"], reward: { gold: 80 }, epilogue: "你帶著一撮星砂上路，它在黑暗中替你指過好幾次方向。" }
+    ],
+    c1_hound: [
+      { id: "stay", label: "讓小灰留在守林人的墓碑旁", done: ["老狗趴在木碑前閉上眼睛。你知道，牠在這裡才是真正的回家。"], reward: { items: { greater_potion: 1 } }, epilogue: "小灰留在守林人的墓旁，村裡的孩子每週都去給牠送飯。" },
+      { id: "bring", label: "帶小灰回村，交給托比", done: ["你抱起老狗走回村口，托比哭著撲上來。小灰舔了舔他的手，像在說：我回來了。"], reward: { gold: 90, items: { healing_potion: 2 } }, epilogue: "小灰回到了托比身邊，還是每天傍晚都會望一眼森林的方向。" }
+    ],
+    c2_clockmaker: [
+      { id: "ring", label: "讓大鐘整點響起，與全城共享", done: ["鐘聲穿過水面，迴盪在每個角落。有人在遠處停下腳步，抬頭聽了很久。"], reward: { gold: 120 }, epilogue: "鐘樓每到整點都會響起搖籃曲，據說路過的人都會莫名放慢腳步。" },
+      { id: "music_box", label: "把樂譜刻進八音盒，交給歐文珍藏", done: ["你把樂譜謄進八音盒。歐文捧著它，像捧著一位久別的老友。"], reward: { items: { mana_elixir: 3 } }, epilogue: "歐文的八音盒再也沒有停過，它成了鐘樓裡唯一不會停擺的東西。" }
+    ],
+    c2_siren: [
+      { id: "free", label: "讓她化為星光，回歸水中", done: ["她在你面前化作點點星光，落入水中，像一場安靜的雨。"], reward: { items: { phoenix_salve: 1 } }, epilogue: "最後的歌者化為星光回到水裡，此後水道再也沒有人聽見悲傷的歌。" },
+      { id: "remember", label: "請她把這首歌教給你，由你記住", done: ["她哼了一遍又一遍，直到你也能哼出同樣的旋律。她笑了：「這樣就不算消失了。」"], reward: { gold: 100, items: { mana_elixir: 2 } }, epilogue: "你學會了歌者的搖籃曲，旅途中偶爾會在營火邊輕輕哼起。" }
+    ],
+    c3_apprentice: [
+      { id: "give", label: "把小鎚帶給巴頓，轉達師父的話", done: ["你把小鎚交到巴頓手裡，一字一句轉達了老匠師的話。年輕的學徒沉默很久，然後用力點頭。"], reward: { gold: 150 }, epilogue: "巴頓用那把小鎚鍛出了出師的第一件作品，刻著「火要繼續燒」。" },
+      { id: "forge", label: "把小鎚放進王座旁的爐裡，讓火繼續燒", done: ["你把小鎚放進爐心。火焰竄高了一瞬，彷彿一位老人欣慰地笑了。"], reward: { items: { star_bomb: 3 } }, epilogue: "王座旁的爐火沒有再熄滅，礦工們說，那是老匠師還在守著。" }
+    ],
+    c3_drake: [
+      { id: "promise", label: "向古龍承諾：不再讓任何人打造鎖鏈", done: ["你舉起手，認真地許下承諾。熔岩深處傳來一聲低鳴，像是回應。"], reward: { items: { greater_potion: 2 } }, epilogue: "你對古龍許下的承諾，成了礦工之間代代相傳的一句口訣。" },
+      { id: "egg", label: "把找回的龍蛋歸還巢穴", done: ["你輕輕把龍蛋放回巢中。母龍低下頭，用鼻尖碰了碰你的手背。"], reward: { gold: 120, items: { star_bomb: 2 } }, epilogue: "龍蛋回到巢中，那年春天，礦坑裡第一次傳來幼龍的啼叫。" }
+    ],
+    c4_observer: [
+      { id: "publish", label: "把報告公開，讓所有人知道真相", done: ["你把數據貼在天球儀的外牆上。第二天，院裡的人們一個接一個停下來讀，沒有人說話。"], reward: { gold: 150 }, epilogue: "那份「不敢說出口的報告」被貼在星象院外牆，成了後人必讀的第一頁。" },
+      { id: "keep", label: "把報告收好，留到最後一刻再說", done: ["你把報告折好放進懷裡。你知道，有些真相需要在對的時間說出口。"], reward: { items: { phoenix_salve: 2 } }, epilogue: "你把觀測員的報告留到了最後一刻，它在王座前派上了用場。" }
+    ],
+    c4_mirror: [
+      { id: "accept", label: "告訴影子：這條路是你自己選的", done: ["影子點了點頭，眼底有釋然。「那就好。」他說，「替我好好走完。」"], reward: { items: { greater_potion: 2 } }, epilogue: "你對梅林的影子說：這是我自己的選擇。那之後，你再也沒夢見過鏡廊。" },
+      { id: "thank", label: "替鏡中的另一個自己道謝", done: ["你對著鏡子鞠了一躬。鏡面泛起漣漪，另一個你笑了，然後慢慢散開。"], reward: { gold: 140, items: { mana_elixir: 2 } }, epilogue: "你向鏡中另一個自己道了謝，鏡子從此再也映不出別人。" }
+    ],
+    c5_templar: [
+      { id: "carve", label: "替三百二十一人各刻上名字", done: ["你一個一個刻上名字，直到天色暗下來。最後一個刻完，石碑安靜地亮了一下。"], reward: { gold: 200 }, epilogue: "三百二十一個名字被刻在王座大廳，後來的人經過時都會放慢腳步。" },
+      { id: "release", label: "告訴他們：你們可以離開了", done: ["你站在石碑前，輕聲說出那句沒人對他們說過的話。鎧甲們一座座化為光，朝著海的方向飄去。"], reward: { items: { phoenix_salve: 3 } }, epilogue: "你對禁衛們說了「你們可以離開了」，那夜，城牆上的鎧甲都化成了光。" }
+    ],
+    c5_king: [
+      { id: "forgive", label: "替國王說出原諒", done: ["你站在王座前，輕輕說了一句：「我原諒你。」不是替自己，而是替那顆被鎖住的星。"], reward: { items: { greater_potion: 3 } }, epilogue: "你在王座前替國王說了「原諒」，三十年的迴響終於停了。" },
+      { id: "remember", label: "把信帶在身上，讓後人記住他的錯", done: ["你把信折好放進貼身口袋。有些愧疚，必須被記住，才不會重演。"], reward: { gold: 250, items: { phoenix_salve: 2 } }, epilogue: "你把國王的信帶在身上，後來把它放進了圖書館最顯眼的那一格。" }
+    ]
+  };
+  D.storyChains.forEach(c => { c.steps[c.steps.length - 1].choices = choices[c.id]; });
+
   // 對應手札（解鎖後進入圖鑑，並計入結局條件的手札數量）
   D.storyChains.forEach((c, i) => {
     D.loreEntries.push({ id: c.lore, chapter: c.chapter, title: c.finalLoreText.match(/^《.*?》/)[0], text: c.finalLoreText.replace(/^《.*?》：/, "") });
