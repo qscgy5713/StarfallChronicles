@@ -42,8 +42,12 @@ function runTests() {
     "../js/save_migrations.js",
     "../js/engine_guild.js",
     "../js/engine_story.js",
+    "../js/engine_objective.js",
+    "../js/engine_map.js",
+    "../js/engine_battle.js",
     "../js/data_story.js",
-    "../js/ui_guild.js"
+    "../js/ui_guild.js",
+    "../js/touch_ui.js"
   ];
   const emojiRegex = /\p{Extended_Pictographic}/u;
   filesToCheck.forEach(rel => {

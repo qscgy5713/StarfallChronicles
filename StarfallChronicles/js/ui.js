@@ -25,6 +25,7 @@ class GameUI {
     this.initStaticPixelIcons();
     this.initParticles();
     this.bindEvents();
+    if (this.initTouchControls) this.initTouchControls();
     this.startTimer();
     this.renderAll();
     this.startAnimationLoop();
@@ -648,6 +649,7 @@ class GameUI {
       this.mh3d.snapCamera();
     }
     this.renderAll();
+    return res;
   }
 
   startAnimationLoop() {

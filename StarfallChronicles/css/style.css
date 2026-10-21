@@ -1425,3 +1425,36 @@ body.in-combat .rt-banner:not(:empty) { display: block; animation: bannerIn 2.6s
 /* 委託板徽章 */
 .nav-btn { position: relative; }
 .nav-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: #ef4444; color: #fff; font-size: 11px; line-height: 16px; font-weight: 800; text-align: center; }
+
+/* ============================================================
+   觸控操作：虛擬搖桿與動作按鈕（只在觸控裝置顯示，body.touch-ui）
+   ============================================================ */
+#touch-controls { display: none; }
+body.touch-ui { touch-action: manipulation; }
+body.touch-ui canvas, body.touch-ui #touch-controls { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+body.touch-ui input, body.touch-ui textarea { -webkit-user-select: text; user-select: text; }
+body.touch-ui #touch-controls { display: block; position: fixed; inset: 0; pointer-events: none; z-index: 30; }
+.touch-pad {
+  position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: 122px; width: 132px; height: 132px; border-radius: 50%;
+  background: rgba(15, 23, 42, 0.55); border: 2px solid rgba(148, 163, 184, 0.5); pointer-events: auto; touch-action: none;
+}
+.touch-knob {
+  position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%;
+  background: rgba(56, 189, 248, 0.6); border: 2px solid rgba(186, 230, 253, 0.9); transition: transform 0.04s linear;
+}
+.touch-actions {
+  position: absolute; right: max(76px, env(safe-area-inset-right)); bottom: 122px; width: 236px; display: flex; flex-wrap: wrap;
+  justify-content: flex-end; gap: 8px; pointer-events: auto;
+}
+.touch-btn {
+  min-width: 52px; height: 44px; padding: 0 10px; border-radius: 12px; font-size: 13px; font-weight: 800; touch-action: none;
+  background: rgba(15, 23, 42, 0.72); color: #e2e8f0; border: 2px solid rgba(148, 163, 184, 0.55);
+}
+.touch-btn.big { width: 84px; height: 62px; font-size: 16px; background: rgba(120, 53, 15, 0.8); border-color: #fbbf24; color: #fef3c7; }
+.touch-btn:active { filter: brightness(1.4); transform: scale(0.95); }
+@media (max-height: 520px) {
+  .touch-pad { bottom: 120px; width: 108px; height: 108px; }
+  .touch-actions { bottom: 120px; gap: 6px; }
+  .touch-btn { height: 40px; min-width: 50px; }
+  .touch-btn.big { height: 52px; }
+}

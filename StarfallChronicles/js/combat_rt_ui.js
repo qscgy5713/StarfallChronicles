@@ -411,15 +411,9 @@ const GameUIRT = {
     else if (k === "x") this.onForesightSlashClick();
     else if (k === "f") this.onFleeClick();
     else if (k === "t") this.toggleRtAuto();
-    else if (k === "h" || k === "n") {
-      const id = this.quickItemId(k.toUpperCase());
-      if (id) this.onUseItemClick(id);
-      else this.showToast(k === "h" ? "沒有可用的回復藥水" : "沒有魔力飲", "warn");
-    }
-    else if (k === "z") {
-      const order = ["head", "body", "tail"];
-      this.onSelectMonsterPartClick(order[(order.indexOf(c.targetPart || "body") + 1) % 3]);
-    } else if (e.key === " ") this.onCombatSkillClick("slash");
+    else if (k === "h" || k === "n") this.useQuickItem(k === "h" ? "heal" : "mana");
+    else if (k === "z") this.cycleTargetPart();
+    else if (e.key === " ") this.onCombatSkillClick("slash");
     else {
       const idx = parseInt(e.key, 10) - 1;
       if (idx >= 0 && idx < this.engine.state.unlockedSkills.length) this.onCombatSkillClick(this.engine.state.unlockedSkills[idx]);
@@ -427,6 +421,21 @@ const GameUIRT = {
     }
     e.preventDefault();
     return true;
+  },
+
+  // 喝快捷藥水：kind = "heal"（[H]）或 "mana"（[N]）；鍵盤與觸控按鈕共用
+  useQuickItem(kind) {
+    const id = this.quickItemId(kind === "heal" ? "H" : "N");
+    if (id) this.onUseItemClick(id);
+    else this.showToast(kind === "heal" ? "沒有可用的回復藥水" : "沒有魔力飲", "warn");
+  },
+
+  // 切換鎖定部位（頭 → 軀幹 → 尾）；鍵盤 [Z] 與觸控按鈕共用
+  cycleTargetPart() {
+    const c = this.engine.combat;
+    if (!c) return;
+    const order = ["head", "body", "tail"];
+    this.onSelectMonsterPartClick(order[(order.indexOf(c.targetPart || "body") + 1) % 3]);
   },
 
   // 探索中的技能列快捷鍵 (1~9、Space)：回傳 true 表示已處理

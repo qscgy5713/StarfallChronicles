@@ -34,6 +34,7 @@ global.localStorage = { getItem: () => null, setItem: () => {} };
 require(root + "ui.js");
 require(root + "combat_rt_ui.js");
 require(root + "ui_guild.js");
+require(root + "touch_ui.js");
 
 const D = global.window.GAME_DATA;
 const g = new StarfallEngine(D);
@@ -194,6 +195,82 @@ const goldB = g.state.gold;
 click("board-body", "window\\.gameUI\\.onClaimBounty\\(0\\)");
 assert.ok(g.state.gold > goldB && g.state.bounty.claimed >= 1);
 ok("常駐懸賞：列出 3 張，點領取發獎並換新的一張");
+
+// 16 觸控：搖桿方向判斷、動作按鈕、戰鬥/探索走位
+assert.deepStrictEqual(ui.joystickDir(30, 5), [1, 0]);
+assert.deepStrictEqual(ui.joystickDir(-3, -40), [0, -1]);
+assert.deepStrictEqual(ui.joystickDir(-25, 30), [0, 1], "斜向取較大軸");
+assert.strictEqual(ui.joystickDir(5, 5), null, "死區內不動作");
+assert.ok(!ui.isTouchDevice(), "Node 測試環境不是觸控裝置");
+assert.strictEqual(ui.touchButtonDefs().length, 9);
+assert.ok(!ui.touchAction("nonexistent"));
+// 探索中：搖桿方向每個計時 tick 走一格
+g.state.chapter = 1;
+g.loadZone(1, null, null, false, true);
+g.combat = null;
+const px = g.state.x, py = g.state.y;
+let moved = false;
+for (const d of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+  ui.setTouchDir(d);
+  ui._touchStepTick();
+  if (g.state.x !== px || g.state.y !== py) { moved = true; break; }
+}
+assert.ok(moved, "探索中搖桿 tick 會移動主角");
+ui.setTouchDir(null);
+const mx = g.state.x, my = g.state.y;
+ui._touchStepTick();
+assert.ok(g.state.x === mx && g.state.y === my, "放開搖桿後不再移動");
+assert.ok(!ui._touchTimer, "放開搖桿後計時器停止");
+// 被擋住的方向不重複嘗試（避免洗訊息）：推向牆壁
+ui.setTouchDir([-1, 0]);
+let moves = 0;
+const origMove = g.move.bind(g);
+g.move = (dx, dy) => { moves++; return origMove(dx, dy); };
+g.state.x = 1; g.state.y = 1; // 左上角外牆
+for (let i = 0; i < 6; i++) ui._touchStepTick();
+assert.ok(moves <= 2, "同方向被擋住後不再重複移動（實際嘗試 " + moves + " 次）");
+g.move = origMove;
+ui.setTouchDir(null);
+g.loadZone(1, null, null, false, true);
+// 戰鬥中：搖桿寫入 _rtDirs，放開清空；按鈕觸發對應動作
+g.startCombat({ enemyId: "mist_wolf" }, "5,5");
+ui.setTouchDir([0, 1]);
+assert.deepStrictEqual(ui._rtDirs, [[0, 1]]);
+ui.setTouchDir(null);
+assert.deepStrictEqual(ui._rtDirs, []);
+// 戰鬥結束後仍按著搖桿：不會自動走動，放開重按才恢復
+ui.setTouchDir([1, 0]);
+g.combat = null;
+ui._touchStepTick();
+const ex = g.state.x;
+ui._touchStepTick();
+assert.strictEqual(g.state.x, ex, "戰鬥結束後仍按著搖桿不應自動走動");
+assert.ok(ui._touchIgnore && !ui._touchTimer);
+ui.setTouchDir(null);
+assert.ok(!ui._touchIgnore, "放開後解除忽略");
+g.startCombat({ enemyId: "mist_wolf" }, "5,5");
+// 鍵盤方向不被搖桿清掉
+ui._rtDirs = [[-1, 0]];
+ui.setTouchDir([0, 1]);
+ui.setTouchDir(null);
+assert.deepStrictEqual(ui._rtDirs, [[-1, 0]], "放開搖桿只移除搖桿自己的方向");
+ui._rtDirs = [];
+const rt0 = g.combat.rt.auto;
+ui.touchAction("auto");
+assert.notStrictEqual(g.combat.rt.auto, rt0, "自動戰鬥按鈕切換狀態");
+ui.touchAction("auto");
+g.state.inventory.healing_potion = 2;
+g.state.hp = 10;
+ui.touchAction("heal");
+assert.ok(g.state.hp > 10, "回復按鈕喝藥");
+const t0 = g.combat.targetPart || "body";
+ui.touchAction("part");
+assert.notStrictEqual(g.combat.targetPart, t0, "部位按鈕切換鎖定部位");
+g.combat = null;
+toasts.length = 0;
+ui.touchAction("flee");
+assert.ok(toasts.some(m => m.includes("只能在戰鬥中")), "探索中按戰鬥專用按鈕給提示");
+ok("觸控：搖桿方向/死區、探索逐格走位、戰鬥走位、動作按鈕對應鍵盤行為");
 
 console.log(`=== UI 互動測試 ${n} 項全部通過 ===`);
 process.exit(0);
