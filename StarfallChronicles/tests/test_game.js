@@ -35,7 +35,13 @@ function runTests() {
     "../js/mh3d.js",
     "../js/ui.js",
     "../js/combat_rt.js",
-    "../js/combat_rt_ui.js"
+    "../js/combat_rt_ui.js",
+    "../js/data_chapters.js",
+    "../js/data_gen.js",
+    "../js/engine_guild.js",
+    "../js/engine_story.js",
+    "../js/data_story.js",
+    "../js/ui_guild.js"
   ];
   const emojiRegex = /\p{Extended_Pictographic}/u;
   filesToCheck.forEach(rel => {
@@ -368,6 +374,7 @@ function runTests() {
 
   require("../js/ui.js");
   require("../js/combat_rt_ui.js");
+  require("../js/ui_guild.js");
   const testUI = new global.window.GameUI(mhGame);
   assert.ok(testUI, "GameUI 應成功初始化且無任何語法錯誤");
   testUI.renderAll();
@@ -584,7 +591,78 @@ function runTests() {
     console.log("[PASS] Test 13: 公會委託板、章節認證、魔物重生、訓練場與高階補給驗證通過");
   }
 
-  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 13 大自動化測試 100% 通過！ ===");
+  // Test 14: 劇情系統 - 故事支線三段式、劇情場景、手札與結局條件
+  {
+    const dd = global.window.GAME_DATA;
+    assert.strictEqual(dd.storyChains.length, 10, "應有 10 條故事支線");
+    assert.strictEqual(dd.storyScenes.length, 15, "應有 15 段劇情場景");
+    assert.ok(dd.storyChains.every(c => c.steps.length === 3 && c.steps.every(s => s.name && s.offer.length && s.done.length)), "每條故事 3 段且文字完整");
+    assert.ok(dd.storyChains.every(c => dd.loreEntries.some(l => l.id === c.lore)), "每條故事都有對應手札");
+    // 每個章節/子區域：故事 NPC 與場景都能放到地圖上
+    for (let ch = 1; ch <= 5; ch++) {
+      const eg = new StarfallEngine(dd);
+      eg.state.chapter = ch;
+      for (let z = 1; z <= 3; z++) {
+        eg.loadZone(z, null, null, false, true);
+        const npcs = Object.values(eg.activeEvents).filter(e => e.sceneId);
+        assert.ok(npcs.length >= 1, `${ch}-${z} 應有劇情場景`);
+        eg.getStoryChains(ch).forEach(c => {
+          const st = eg.getStoryState(c.id);
+          if (c.steps[st.step].zone === z) assert.ok(eg.getStoryNpcPos(c.id), `${ch}-${z} 應有故事 NPC ${c.id}`);
+        });
+      }
+    }
+    // 走完一條故事：接取 → 擊殺 → 交付 → 下一段 → 結尾解鎖手札
+    const sg = new StarfallEngine(dd);
+    const chain = dd.storyChains.find(c => c.id === "c1_stardust");
+    sg.state.chapter = 1;
+    const talk = z => {
+      sg.loadZone(z, null, null, false, true);
+      const ev = Object.values(sg.activeEvents).find(e => e.storyChain === chain.id);
+      assert.ok(ev, "應找到故事 NPC");
+      return sg.talkStoryNpc(ev);
+    };
+    let r = talk(1);
+    assert.ok(!r.completed && sg.getStoryState(chain.id).accepted, "第一次對話為接取");
+    r = talk(1);
+    assert.ok(!r.completed, "未擊殺前回報應提示進度");
+    for (let i = 0; i < 3; i++) { sg.startCombat({ enemyId: "mist_wolf" }, "5,5"); sg.winCombat(); }
+    const gold0 = sg.state.gold;
+    r = talk(1);
+    assert.ok(r.completed && sg.state.gold > gold0 && sg.getStoryState(chain.id).step === 1, "擊殺完成後交付並進入第二段");
+    // 第二段需交付星辰碎晶
+    r = talk(2);
+    assert.ok(!r.completed);
+    sg.state.inventory.star_shard = 2;
+    r = talk(2);
+    assert.ok(r.completed && !sg.state.inventory.star_shard, "第二段消耗物品並完成");
+    r = talk(3);
+    assert.ok(r.completed && sg.getStoryState(chain.id).done, "最後一段完成後故事結束");
+    assert.ok(sg.state.loreUnlocked.includes("story_lore_1") && sg.state.flags.story_c1_stardust_done, "解鎖專屬手札與旗標");
+    assert.ok(!Object.values((sg.loadZone(3, null, null, false, true), sg.activeEvents)).some(e => e.storyChain === chain.id), "完成後 NPC 不再出現");
+    // 劇情場景可閱讀並給予首次獎勵；任務面板資料
+    sg.loadZone(1, null, null, false, true);
+    const sc = Object.values(sg.activeEvents).find(e => e.sceneId === "s1a");
+    assert.ok(sc && sc.dialogue.length >= 2 && sc.firstReward);
+    const g1 = sg.state.gold;
+    sg.interactTile(5, 5, "N", sc);
+    assert.ok(sg.state.gold > g1 && sg.state.flags.scene_s1a, "首次閱讀場景給獎勵並記旗標");
+    sg.refreshStoryEvents();
+    assert.ok(!Object.values(sg.activeEvents).find(e => e.sceneId === "s1a").firstReward, "領過後重新放置不再有獎勵");
+    assert.ok(sg.getStoryLog().some(l => l.done) && sg.getStoryLog().length === 2, "故事紀錄應列出本章 2 條");
+    // 手札數量讓結局解鎖條件更容易達成
+    sg.state.loreUnlocked = dd.storyChains.map(c => c.lore).slice(0, 6);
+    assert.ok(sg.getAvailableEndings().includes("symbiosis"), "6 篇手札可解鎖共生結局");
+    sg.state.loreUnlocked = dd.storyChains.map(c => c.lore);
+    assert.ok(sg.getAvailableEndings().includes("voyager"), "10 篇手札可解鎖隱藏結局");
+    // 存檔往返
+    const sg2 = new StarfallEngine(dd);
+    sg2.deserialize(sg.serialize());
+    assert.ok(sg2.getStoryState(chain.id).done);
+    console.log("[PASS] Test 14: 劇情系統（10 條三段式故事/15 段場景/手札與結局條件）驗證通過");
+  }
+
+  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 14 大自動化測試 100% 通過！ ===");
 }
 
 runTests();
