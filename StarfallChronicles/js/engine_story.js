@@ -112,6 +112,7 @@ class StoryMixin {
 
   _grantReward(rw) {
     const parts = [];
+    let leveled = false;
     if (rw.gold) { this.state.gold += rw.gold; parts.push(`+${rw.gold}G`); }
     if (rw.sp) { this.state.skillPoints += rw.sp; parts.push(`+${rw.sp}SP`); }
     if (rw.items) {
@@ -120,8 +121,8 @@ class StoryMixin {
         parts.push(`【${this.data.items[id] ? this.data.items[id].name : id}】x${n}`);
       });
     }
-    if (rw.exp) { this.state.exp += rw.exp; parts.push(`+${rw.exp}EXP`); this._levelUpFromExp(); }
-    this.recalcStats(false);
+    if (rw.exp) { this.state.exp += rw.exp; parts.push(`+${rw.exp}EXP`); leveled = this._levelUpFromExp(); }
+    this.recalcStats(leveled);
     return parts.join(" ");
   }
 

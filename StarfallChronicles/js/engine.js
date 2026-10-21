@@ -6,6 +6,23 @@
 const RT_HP_MULT = 14;
 
 class StarfallEngine {
+  // 舊存檔：一般魔物原本擊敗後永久消失，現在改為會重生，清掉這些已完成標記（精英/首領/帶旗標者保留）
+  _migrateEnemyRespawn() {
+    if (this.state.respawnMigrated) return;
+    this.state.respawnMigrated = true;
+    const ce = this.state.completedEvents || {};
+    Object.keys(ce).forEach(k => {
+      const m = k.match(/^ch(\d+)_(?:z(\d+)_)?(\d+,\d+)$/);
+      if (!m) return;
+      const chap = this.data.chapters[m[1]];
+      const zone = chap && chap.zones && chap.zones[m[2] || 1];
+      const ev = zone && zone.events && zone.events[m[3]];
+      if (!ev || ev.type !== "enemy" || ev.winFlag) return;
+      const tpl = this.data.enemies[ev.enemyId];
+      if (tpl && !tpl.isElite && !tpl.isBoss) delete ce[k];
+    });
+  }
+
   abyssModOf(id) {
     return (this.data.abyssMods || []).find(m => m.id === id) || null;
   }
@@ -358,8 +375,9 @@ class StarfallEngine {
     if (s.inAbyss || !obj) return obj;
     if (/^(首領決戰|最終決戰)/.test(obj.text) && !this.isChapterGateOpen(s.chapter)) {
       const g = this.getChapterGate(s.chapter);
+      const here = g.elite && g.elite.zone === (s.subZone || 1);
       return {
-        x: 2, y: 2, gate: true,
+        x: here ? g.elite.x : 2, y: here ? g.elite.y : 2, gate: true,
         step: `章節認證 ${g.done}/${g.need}`,
         text: `公會認證：先完成 ${g.need} 件獵人公會委託（目前 ${g.done}/${g.need}）${g.eliteOk ? "" : `並討伐${g.elite ? `${g.elite.name}（${s.chapter}-${g.elite.zone} 區 (${g.elite.x},${g.elite.y})）` : "本章菁英"}`}，才能挑戰本章首領！`,
         sub: "點右側【委託板】接取委託：狩獵魔物、剝取素材都算；菁英討伐是必要委託。魔物在營火休息後會重生。"
@@ -1196,7 +1214,7 @@ class StarfallEngine {
     if (this.state.gold >= 500) this.unlockAchievement("ach_rich");
     if (this.state.level >= 8) this.unlockAchievement("ach_max_level");
     if (this.state.loreUnlocked.length >= 10) this.unlockAchievement("ach_scholar");
-    if (this.state.loreUnlocked.length >= 15) this.unlockAchievement("ach_loremaster");
+    if (this.getWorldLoreCount() >= 15) this.unlockAchievement("ach_loremaster");
     if (this.state.stats.itemsCrafted >= 3) this.unlockAchievement("ach_craftsman");
     if (this.state.stats.shieldsBroken >= 5) this.unlockAchievement("ach_shield_breaker");
     if (this.state.stats.mysteriesResolved >= 1) this.unlockAchievement("ach_mystery_seeker");
@@ -2034,7 +2052,8 @@ class StarfallEngine {
       const rewardFlag = `npc_reward_${this.state.chapter}_${coord}`;
       const rewardFlagZone = `npc_reward_${this.state.chapter}_${z}_${coord}`;
 
-      if (resolvedEv.firstReward && !this.state.flags[rewardFlag] && !this.state.flags[rewardFlagZone]) {
+      const rewardClaimed = resolvedEv.sceneId ? !!this.state.flags[`scene_${resolvedEv.sceneId}`] : !!(this.state.flags[rewardFlag] || this.state.flags[rewardFlagZone]);
+      if (resolvedEv.firstReward && !rewardClaimed) {
         this.state.flags[rewardFlag] = true;
         this.state.flags[rewardFlagZone] = true;
         if (resolvedEv.firstReward.gold) {
@@ -2064,9 +2083,6 @@ class StarfallEngine {
             dialogueLines.push(`【支線委託已完成：${sq.title}】「再次感謝你的鼎力相助，願星光永遠庇佑你的旅途！」`);
           } else if (sqStatus.ready) {
             if (!this.state.completedSideQuests) this.state.completedSideQuests = [];
-    if (!this.state.board) this.state.board = { prog: {}, done: [] };
-    if (!this.state.train) this.state.train = {};
-    if (!this.state.story) this.state.story = {};
             this.state.completedSideQuests.push(sq.id);
             if (sq.reqType === "item" && sq.consumeItem) {
               this.state.inventory[sq.reqItem] -= sq.reqCount;
@@ -2786,7 +2802,7 @@ class StarfallEngine {
     const weakText = (template.weaknesses || []).map(w => elemNames[w] || w).join(" / ");
     const isAmbush = !!(ev.stunnedSteps && ev.stunnedSteps > 0);
     const startHp = isAmbush ? Math.max(1, Math.round(maxHp * 0.85)) : maxHp;
-    const startShield = (isAmbush ? Math.max(1, template.shield - 1) : template.shield) + (this.abyssModOf(ev.abyssMod) && this.abyssModOf(ev.abyssMod).shield ? this.abyssModOf(ev.abyssMod).shield : 0);
+    const startShield = (isAmbush ? Math.max(1, template.shield - 1) : template.shield) + (amod && amod.shield ? amod.shield : 0);
 
     const initLogs = [
       ev.intro || `[進入戰鬥] 遭遇敵人：【${template.name}】！`,
@@ -3475,6 +3491,11 @@ class StarfallEngine {
     return this.rtStartFlee();
   }
 
+  // 主線世界觀手札數量（不含故事支線手札），用於成就與隱藏結局條件
+  getWorldLoreCount() {
+    return this.state.loreUnlocked.filter(id => /^lore_/.test(id)).length;
+  }
+
   getAvailableEndings() {
     const list = ["liberation", "guardian"];
     if (this.state.loreUnlocked.length >= 6) {
@@ -3483,7 +3504,7 @@ class StarfallEngine {
     const hasSovereign =
       this.state.equipment.weapon === "astral_sovereign" ||
       (this.state.inventory["astral_sovereign"] || 0) > 0;
-    if (hasSovereign || this.state.loreUnlocked.length >= 10) {
+    if (hasSovereign || this.getWorldLoreCount() >= 10) {
       list.push("voyager");
     }
     return list;
@@ -3509,6 +3530,10 @@ class StarfallEngine {
     if (!this.state.bestiaryKills) this.state.bestiaryKills = {};
     if (!this.state.subZone) this.state.subZone = 1;
     if (!this.state.completedSideQuests) this.state.completedSideQuests = [];
+    if (!this.state.board) this.state.board = { prog: {}, done: [] };
+    if (!this.state.train) this.state.train = {};
+    if (!this.state.story) this.state.story = {};
+    this._migrateEnemyRespawn();
     if (!this.state.equipUpgrades) this.state.equipUpgrades = { weapon: 0, armor: 0, relic: 0 };
     if (typeof this.state.compassEnabled !== "boolean") this.state.compassEnabled = false;
     if (typeof this.state.fullMapView !== "boolean") this.state.fullMapView = false;

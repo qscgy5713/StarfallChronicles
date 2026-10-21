@@ -654,7 +654,21 @@ function runTests() {
     sg.state.loreUnlocked = dd.storyChains.map(c => c.lore).slice(0, 6);
     assert.ok(sg.getAvailableEndings().includes("symbiosis"), "6 篇手札可解鎖共生結局");
     sg.state.loreUnlocked = dd.storyChains.map(c => c.lore);
-    assert.ok(sg.getAvailableEndings().includes("voyager"), "10 篇手札可解鎖隱藏結局");
+    assert.ok(!sg.getAvailableEndings().includes("voyager"), "只靠故事手札不能解鎖隱藏結局");
+    assert.strictEqual(sg.getWorldLoreCount(), 0);
+    sg.state.loreUnlocked = dd.loreEntries.filter(l => /^lore_/.test(l.id)).slice(0, 10).map(l => l.id);
+    assert.ok(sg.getAvailableEndings().includes("voyager"), "10 篇主線手札可解鎖隱藏結局");
+    // 舊存檔遷移：一般魔物的已完成標記被清除，精英/首領保留
+    const mg = new StarfallEngine(dd);
+    const wolfCoord = Object.entries(dd.chapters[1].zones[1].events).find(([c, e]) => e.type === "enemy" && !e.winFlag)[0];
+    const eliteCoord = Object.entries(dd.chapters[1].zones[2].events).find(([c, e]) => e.winFlag === "elite_fenrir_defeated")[0];
+    const old = JSON.parse(mg.serialize());
+    delete old.state.respawnMigrated;
+    old.state.completedEvents[`ch1_z1_${wolfCoord}`] = true;
+    old.state.completedEvents[`ch1_z2_${eliteCoord}`] = true;
+    mg.deserialize(old);
+    assert.ok(!mg.state.completedEvents[`ch1_z1_${wolfCoord}`] && mg.state.completedEvents[`ch1_z2_${eliteCoord}`], "舊存檔遷移只清一般魔物");
+    assert.ok(mg.state.board && mg.state.train && mg.state.story, "反序列化補齊預設欄位");
     // 存檔往返
     const sg2 = new StarfallEngine(dd);
     sg2.deserialize(sg.serialize());

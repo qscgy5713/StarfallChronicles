@@ -223,7 +223,6 @@ class GuildMixin {
     this.log(`[無盡星淵] 踏入【無盡星淵試煉：第 ${floor} 層 (40x28 巨型裂隙)】！本層詞綴【${mod.name}】：${mod.desc}`, "chapter");
   }
 
-  // 檢查支線任務進度與是否達成條件
   // ==================== 獵人公會委託板 ====================
   getBoardState() {
     if (!this.state.board) this.state.board = { prog: {}, done: [] };
@@ -266,24 +265,29 @@ class GuildMixin {
     }
     b.done.push(id);
     const rw = q.reward, parts = [];
+    let leveled = false;
     if (rw.gold) { this.state.gold += rw.gold; parts.push(`${rw.gold}G`); }
     if (rw.sp) { this.state.skillPoints += rw.sp; parts.push(`+${rw.sp}SP`); }
     if (rw.items) Object.entries(rw.items).forEach(([iid, n]) => { this.addItem(iid, n); parts.push(`${this.data.items[iid] ? this.data.items[iid].name : iid}x${n}`); });
-    if (rw.exp) { this.state.exp += rw.exp; parts.push(`${rw.exp}EXP`); this._levelUpFromExp(); }
-    this.recalcStats(false);
+    if (rw.exp) { this.state.exp += rw.exp; parts.push(`${rw.exp}EXP`); leveled = this._levelUpFromExp(); }
+    this.recalcStats(leveled);
     if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("levelup");
     this.log(`[公會委託] 完成【${q.title}】！獲得 ${parts.join("、")}。`, "achievement");
     this.checkMilestoneAchievements();
     return { ok: true, quest: q, text: parts.join("、") };
   }
 
+  // 把 EXP 換算成等級；回傳是否升級（呼叫端據此決定 recalcStats 是否補滿 HP/MP）
   _levelUpFromExp() {
+    let leveled = false;
     while (this.state.exp >= this.state.maxExp) {
       this.state.exp -= this.state.maxExp;
       this.state.level++;
       this.state.maxExp = Math.round(this.state.maxExp * 1.35);
       this.state.skillPoints += 1;
+      leveled = true;
     }
+    return leveled;
   }
 
   // 擊敗魔物時累計「獵殺」類委託

@@ -1614,7 +1614,7 @@ class GameUI {
     if (!container) return;
     // 相同訊息只保留一則並重新計時；同時最多顯示 4 則，避免連續事件把畫面塞滿
     for (const old of container.children) {
-      if (old.dataset.msg === text) {
+      if (old.dataset.msg === text && !old.classList.contains("fade-out")) {
         clearTimeout(old._tm);
         old._tm = setTimeout(() => this._dismissToast(old), 2800);
         return;
