@@ -2205,9 +2205,13 @@ class GameUI {
   }
 
   onLoadSlot(slot) {
-    if (this.engine.loadGame(slot)) {
-      this.showToast(`已讀取存檔槽 #${slot}`, "gold");
-      this.closeModals();
+    try {
+      if (this.engine.loadGame(slot)) {
+        this.showToast(`已讀取存檔槽 #${slot}`, "gold");
+        this.closeModals();
+      }
+    } catch (err) {
+      this.showToast(/比遊戲支援的/.test(err.message) ? err.message : "存檔損毀，無法讀取", "warn");
     }
   }
 
@@ -2233,7 +2237,7 @@ class GameUI {
         this.showToast("存檔匯入成功！", "gold");
         this.closeModals();
       } catch (err) {
-        this.showToast("存檔檔案格式不正確", "warn");
+        this.showToast(/比遊戲支援的/.test(err.message) ? err.message : "存檔檔案格式不正確", "warn");
       }
     };
     reader.readAsText(file);

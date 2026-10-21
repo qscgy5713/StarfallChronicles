@@ -42,23 +42,6 @@ class StarfallEngine {
     });
   }
 
-  // 舊存檔：一般魔物原本擊敗後永久消失，現在改為會重生，清掉這些已完成標記（精英/首領/帶旗標者保留）
-  _migrateEnemyRespawn() {
-    if (this.state.respawnMigrated) return;
-    this.state.respawnMigrated = true;
-    const ce = this.state.completedEvents || {};
-    Object.keys(ce).forEach(k => {
-      const m = k.match(/^ch(\d+)_(?:z(\d+)_)?(\d+,\d+)$/);
-      if (!m) return;
-      const chap = this.data.chapters[m[1]];
-      const zone = chap && chap.zones && chap.zones[m[2] || 1];
-      const ev = zone && zone.events && zone.events[m[3]];
-      if (!ev || ev.type !== "enemy" || ev.winFlag) return;
-      const tpl = this.data.enemies[ev.enemyId];
-      if (tpl && !tpl.isElite && !tpl.isBoss) delete ce[k];
-    });
-  }
-
   abyssModOf(id) {
     return (this.data.abyssMods || []).find(m => m.id === id) || null;
   }
@@ -142,6 +125,7 @@ class StarfallEngine {
       board: { prog: {}, done: [] },
       train: {},
       story: {},
+      bounty: { slots: [], claimed: 0 },
       visitedZones: {},
       stats: {
         battlesWon: 0,
@@ -3332,6 +3316,7 @@ class StarfallEngine {
     this.state.bestiaryKills[c.enemyId] = (this.state.bestiaryKills[c.enemyId] || 0) + 1;
     this._boardOnKill(c.enemyId);
     this._storyOnKill(c.enemyId);
+    this._bountyOnKill(c.enemyId);
 
     const dropsWon = [];
     if (template.drops) {
@@ -3518,6 +3503,8 @@ class StarfallEngine {
   }
 
   serialize() {
+    const Save = (typeof window !== "undefined" && window.StarfallSave) || require("./save_migrations.js").StarfallSave;
+    this.state.saveVer = Save.CURRENT;
     return JSON.stringify({
       version: "3.0.0",
       savedAt: new Date().toLocaleString(),
@@ -3531,43 +3518,11 @@ class StarfallEngine {
   deserialize(jsonStr) {
     const parsed = typeof jsonStr === "string" ? JSON.parse(jsonStr) : jsonStr;
     if (!parsed || !parsed.state) throw new Error("無效的存檔格式");
+    const Save0 = (typeof window !== "undefined" && window.StarfallSave) || require("./save_migrations.js").StarfallSave;
+    if ((parsed.state.saveVer || 0) > Save0.CURRENT) throw new Error(`存檔版本 ${parsed.state.saveVer} 比遊戲支援的 ${Save0.CURRENT} 新，請更新遊戲後再讀取`);
     this.state = parsed.state;
-    if (!this.state.unlockedCompanions) this.state.unlockedCompanions = ["lumi"];
-    if (!this.state.companion) this.state.companion = "lumi";
-    if (!this.state.bestiaryKills) this.state.bestiaryKills = {};
-    if (!this.state.subZone) this.state.subZone = 1;
-    if (!this.state.completedSideQuests) this.state.completedSideQuests = [];
-    if (!this.state.board) this.state.board = { prog: {}, done: [] };
-    if (!this.state.train) this.state.train = {};
-    if (!this.state.story) this.state.story = {};
-    this._migrateEnemyRespawn();
-    if (!this.state.visitedZones) {
-      // 舊存檔：已通過的章節視為全區到過，目前章節只算到目前子區域
-      this.state.visitedZones = {};
-      for (let c = 1; c < this.state.chapter; c++) for (let z = 1; z <= 3; z++) this.state.visitedZones[`${c}-${z}`] = true;
-      for (let z = 1; z <= (this.state.subZone || 1); z++) this.state.visitedZones[`${this.state.chapter}-${z}`] = true;
-    }
-    if (!this.state.equipUpgrades) this.state.equipUpgrades = { weapon: 0, armor: 0, relic: 0 };
-    if (typeof this.state.compassEnabled !== "boolean") this.state.compassEnabled = false;
-    if (typeof this.state.fullMapView !== "boolean") this.state.fullMapView = false;
-    if (typeof this.state.pulseCooldown !== "number") this.state.pulseCooldown = 0;
-    if (typeof this.state.pulseVisionSteps !== "number") this.state.pulseVisionSteps = 0;
-    if (!this.state.weaponElement) this.state.weaponElement = "physical";
-    if (!this.state.zoneMasteryClaimed) this.state.zoneMasteryClaimed = {};
-    if (!this.state.viewMode) this.state.viewMode = "2d_pixel";
-    // 預設視角改為 2D：舊存檔只遷移一次，之後玩家自行切換的 [V] 選擇會被保留
-    if (this.state.viewDefaultVer !== 2) {
-      this.state.viewMode = "2d_pixel";
-      this.state.viewDefaultVer = 2;
-    }
-    if (typeof this.state.sharpness !== "number") this.state.sharpness = 100;
-    if (typeof this.state.polishTurns !== "number") this.state.polishTurns = 0;
-    if (typeof this.state.spiritLevel !== "number") this.state.spiritLevel = 0;
-    if (this.state.canteenMeal === undefined) this.state.canteenMeal = null;
-    if (!this.state.stats) this.state.stats = {};
-    if (typeof this.state.stats.partsBroken !== "number") this.state.stats.partsBroken = 0;
-    if (typeof this.state.stats.tailsSevered !== "number") this.state.stats.tailsSevered = 0;
-    if (typeof this.state.stats.foresightCounters !== "number") this.state.stats.foresightCounters = 0;
+    const Save = (typeof window !== "undefined" && window.StarfallSave) || require("./save_migrations.js").StarfallSave;
+    Save.migrateState(this.state, this);
 
     if (this.state.inAbyss) {
       if (parsed.abyssSnapshot && parsed.abyssSnapshot.activeMap) {

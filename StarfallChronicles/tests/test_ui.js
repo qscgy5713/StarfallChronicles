@@ -172,5 +172,28 @@ ui.selectEnding("liberation");
 assert.ok(html("ending-choices-box").includes("旅途的回聲") && html("ending-choices-box").includes("星砂"), "結局畫面列出選擇後記");
 ok("結局畫面：顯示故事選擇留下的「旅途的回聲」");
 
+// 14 讀檔錯誤處理：來自較新版本的存檔顯示提示且不破壞目前進度
+const futureRaw = JSON.parse(g.serialize());
+futureRaw.state.saveVer = 999;
+global.localStorage = { getItem: () => JSON.stringify(futureRaw), setItem: () => {} };
+const lvKeep = g.state.level;
+toasts.length = 0;
+ui.onLoadSlot(1);
+assert.ok(toasts.some(m => m.includes("比遊戲支援的")) && g.state.level === lvKeep);
+ok("讀取較新版本存檔：顯示版本提示，目前進度不變");
+
+// 15 常駐懸賞畫面與領取
+g.state.chapter = 1;
+ui.openModal("board");
+ui.renderBoardModal("quests");
+assert.ok(html("board-body").includes("常駐懸賞") && (html("board-body").match(/onClaimBounty/g) || []).length >= 3);
+const bs0 = g.getBounties()[0];
+if (bs0.kind === "item") g.state.inventory[bs0.item] = bs0.count; else g.state.bounty.slots[0].prog = bs0.count;
+ui.renderBoardModal("quests");
+const goldB = g.state.gold;
+click("board-body", "window\\.gameUI\\.onClaimBounty\\(0\\)");
+assert.ok(g.state.gold > goldB && g.state.bounty.claimed >= 1);
+ok("常駐懸賞：列出 3 張，點領取發獎並換新的一張");
+
 console.log(`=== UI 互動測試 ${n} 項全部通過 ===`);
 process.exit(0);

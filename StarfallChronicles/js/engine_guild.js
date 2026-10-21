@@ -306,6 +306,67 @@ class GuildMixin {
     return { ok: true, zoneName: chap.zones[z].name };
   }
 
+  // ==================== 常駐懸賞（可重複）====================
+  // 公會永遠掛著 3 張懸賞單；領取後立刻換一張新的，讓後期金幣與素材有持續的來源。
+  _newBounty() {
+    const ch = Math.max(1, this.state.chapter);
+    const normals = Object.values(this.data.enemies).filter(e => !e.isElite && !e.isBoss && (e.chapter || 1) <= ch);
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    const kind = pick(["kill", "kill", "any", "item"]);
+    const reward = { gold: 50 + ch * 35, items: { [pick(["healing_potion", "mana_elixir", "greater_potion", "star_bomb"])]: 1 + (ch >= 3 ? 1 : 0) } };
+    if (kind === "any") {
+      const count = 10 + ch * 2;
+      return { kind, enemy: "any", count, prog: 0, title: `清剿作戰：擊敗 ${count} 隻魔物`, reward: Object.assign(reward, { gold: Math.round(reward.gold * 1.3) }) };
+    }
+    const e = pick(normals);
+    if (kind === "kill") {
+      const count = 5 + Math.floor(ch / 2);
+      return { kind, enemy: e.id, count, prog: 0, title: `懸賞獵殺：${e.name} x${count}`, reward };
+    }
+    const part = pick(["hide", "fang"]);
+    const item = e.carve ? e.carve[part] : null;
+    if (!item) return this._newBounty();
+    const count = 3;
+    return { kind: "item", item, count, prog: 0, title: `素材收購：${this.data.items[item].name} x${count}`, reward: Object.assign(reward, { gold: Math.round(reward.gold * 1.2) }) };
+  }
+
+  getBounties() {
+    const st = this.state;
+    if (!st.bounty) st.bounty = { slots: [], claimed: 0 };
+    while (st.bounty.slots.length < 3) st.bounty.slots.push(this._newBounty());
+    return st.bounty.slots.map((b, i) => {
+      const cur = b.kind === "item" ? Math.min(this.state.inventory[b.item] || 0, b.count) : Math.min(b.prog, b.count);
+      return Object.assign({ index: i, cur, ready: cur >= b.count }, b);
+    });
+  }
+
+  claimBounty(i) {
+    const list = this.getBounties();
+    const b = list[i];
+    if (!b) return { ok: false, msg: "沒有這張懸賞單" };
+    if (!b.ready) return { ok: false, msg: `尚未達成（${b.cur}/${b.count}）` };
+    if (b.kind === "item") {
+      this.state.inventory[b.item] -= b.count;
+      if (this.state.inventory[b.item] <= 0) delete this.state.inventory[b.item];
+    }
+    const parts = [`${b.reward.gold}G`];
+    this.state.gold += b.reward.gold;
+    Object.entries(b.reward.items || {}).forEach(([id, n]) => { this.addItem(id, n); parts.push(`${this.data.items[id].name}x${n}`); });
+    this.state.bounty.slots[i] = this._newBounty();
+    this.state.bounty.claimed = (this.state.bounty.claimed || 0) + 1;
+    if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("coin");
+    this.log(`[公會懸賞] 完成【${b.title}】，獲得 ${parts.join("、")}。`, "success");
+    return { ok: true, title: b.title, text: parts.join("、") };
+  }
+
+  _bountyOnKill(enemyId) {
+    if (!this.state.bounty) return;
+    this.state.bounty.slots.forEach(b => {
+      if (b.kind === "item") return;
+      if (b.enemy === "any" || b.enemy === enemyId) b.prog = Math.min(b.count, (b.prog || 0) + 1);
+    });
+  }
+
   // 擊敗魔物時累計「獵殺」類委託
   _boardOnKill(enemyId) {
     const b = this.getBoardState();

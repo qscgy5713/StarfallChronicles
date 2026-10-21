@@ -66,7 +66,14 @@ const GameUIGuild = {
         <div class="inv-card-desc">${q.quest.desc}<br><span style="color:#facc15;">獎勵：${rwText}</span></div></div>`;
     };
     let html = tabs;
-    html += `<div class="inv-card equipped"><div class="inv-card-head"><strong>第 ${s.chapter} 章認證：${gate.done}/${gate.need}</strong>
+    html += `<div class="craft-title">常駐懸賞（可重複，領取後換新的）</div>
+      <div class="wide-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;">${eng.getBounties().map(b => {
+        const rw = `${b.reward.gold}G、${Object.entries(b.reward.items).map(([i, n]) => `${eng.data.items[i].name}x${n}`).join("、")}`;
+        return `<div class="inv-card"><div class="inv-card-head"><span><strong>${b.title}</strong></span>
+          <button class="btn-sm ${b.ready ? "btn-teal" : "btn-secondary"}" ${b.ready ? "" : "disabled"} onclick="window.gameUI.onClaimBounty(${b.index})">${b.ready ? "領取" : `${b.cur}/${b.count}`}</button></div>
+          <div class="inv-card-desc"><span style="color:#facc15;">獎勵：${rw}</span></div></div>`;
+      }).join("")}</div>`;
+    html += `<div class="inv-card equipped" style="margin-top:10px;"><div class="inv-card-head"><strong>第 ${s.chapter} 章認證：${gate.done}/${gate.need}</strong>
       <span class="badge-key">${gate.done >= gate.need ? "已通過，可挑戰首領" : "完成足夠委託才能挑戰本章首領"}</span></div>
       <div class="inv-card-desc">魔物會在營火休息或重新進入區域後重生，可放心刷怪。前面章節的委託也能回頭補完。</div></div>`;
     for (let ch = s.chapter; ch >= 1; ch--) {
@@ -83,6 +90,13 @@ const GameUIGuild = {
     this.closeModals();
     this.showToast(`傳送到 ${ch}-${z}：${r.zoneName}`, "teal");
     this.renderAll();
+  },
+
+  onClaimBounty(i) {
+    const r = this.engine.claimBounty(i);
+    this.showToast(r.ok ? `完成懸賞：${r.title}（${r.text}）` : r.msg, r.ok ? "gold" : "warn");
+    this.renderBoardModal();
+    this.renderHUD();
   },
 
   onClaimBoard(id) {

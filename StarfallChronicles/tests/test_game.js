@@ -39,6 +39,7 @@ function runTests() {
     "../js/data_chapters.js",
     "../js/data_gen.js",
     "../js/mixin.js",
+    "../js/save_migrations.js",
     "../js/engine_guild.js",
     "../js/engine_story.js",
     "../js/data_story.js",
@@ -662,7 +663,7 @@ function runTests() {
     tg.enterAbyss(1);
     assert.ok(!tg.travelTo(1, 1).ok, "星淵中不能傳送");
     const old2 = JSON.parse(tg.serialize());
-    delete old2.state.visitedZones;
+    delete old2.state.visitedZones; delete old2.state.saveVer;
     old2.state.chapter = 3; old2.state.subZone = 2; old2.state.inAbyss = false;
     const tg2 = new StarfallEngine(dd);
     tg2.deserialize(old2);
@@ -706,7 +707,7 @@ function runTests() {
     const wolfCoord = Object.entries(dd.chapters[1].zones[1].events).find(([c, e]) => e.type === "enemy" && !e.winFlag)[0];
     const eliteCoord = Object.entries(dd.chapters[1].zones[2].events).find(([c, e]) => e.winFlag === "elite_fenrir_defeated")[0];
     const old = JSON.parse(mg.serialize());
-    delete old.state.respawnMigrated;
+    delete old.state.saveVer;
     old.state.completedEvents[`ch1_z1_${wolfCoord}`] = true;
     old.state.completedEvents[`ch1_z2_${eliteCoord}`] = true;
     mg.deserialize(old);
@@ -719,7 +720,83 @@ function runTests() {
     console.log("[PASS] Test 14: 劇情系統（10 條三段式故事/15 段場景/手札與結局條件）驗證通過");
   }
 
-  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 14 大自動化測試 100% 通過！ ===");
+  // Test 15: 存檔版本與遷移
+  {
+    const { StarfallSave } = require("../js/save_migrations.js");
+    const dd = global.window.GAME_DATA;
+    const vs = StarfallSave.MIGRATIONS.map(m => m.to);
+    assert.deepStrictEqual(vs, vs.map((_, i) => i + 1), "遷移版本必須從 1 連續遞增");
+    assert.strictEqual(StarfallSave.CURRENT, vs[vs.length - 1]);
+    // 極舊存檔：只有最基本欄位，讀入後應補齊全部新欄位
+    const base = new StarfallEngine(dd);
+    const raw = JSON.parse(base.serialize());
+    ["saveVer", "board", "train", "story", "visitedZones", "unlockedCompanions", "bestiaryKills", "equipUpgrades", "zoneMasteryClaimed", "viewDefaultVer"].forEach(k => delete raw.state[k]);
+    delete raw.state.stats.partsBroken;
+    raw.state.chapter = 2; raw.state.subZone = 3; raw.state.viewMode = "3d_hunt";
+    const old = new StarfallEngine(dd);
+    old.deserialize(raw);
+    assert.strictEqual(old.state.saveVer, StarfallSave.CURRENT);
+    assert.ok(old.state.board && old.state.train && old.state.story && old.state.visitedZones["1-2"] && old.state.visitedZones["2-3"] && !old.state.visitedZones["3-1"]);
+    assert.ok(old.state.unlockedCompanions.length >= 1 && old.state.equipUpgrades && old.state.stats.partsBroken === 0);
+    assert.strictEqual(old.state.viewMode, "2d_pixel", "視角遷移一次改為 2D");
+    // 遷移只執行一次：再次讀取不會覆蓋玩家之後自行切換的視角
+    old.state.viewMode = "3d_hunt";
+    const again = new StarfallEngine(dd);
+    again.deserialize(old.serialize());
+    assert.strictEqual(again.state.viewMode, "3d_hunt", "已是最新版本的存檔不再重跑遷移");
+    // 冪等：同一份 state 重跑所有遷移不會改變結果
+    const snap = JSON.stringify(again.state);
+    StarfallSave.MIGRATIONS.forEach(m => m.run(again.state, again));
+    assert.strictEqual(JSON.stringify(again.state), snap, "每筆遷移都可重複執行");
+    // 只從舊版本升級時，只跑較新的遷移
+    const partial = { saveVer: 2, chapter: 1, subZone: 1, completedEvents: {} };
+    assert.deepStrictEqual(StarfallSave.migrateState(partial, again), [3, 4, 5]);
+    // 來自較新版本的存檔被拒絕且不破壞目前狀態
+    const future = JSON.parse(old.serialize());
+    future.state.saveVer = StarfallSave.CURRENT + 1;
+    const keep = JSON.stringify(old.state);
+    assert.throws(() => old.deserialize(future), /比遊戲支援的/);
+    assert.strictEqual(JSON.stringify(old.state), keep, "拒絕讀取時不應改動現有狀態");
+    console.log("[PASS] Test 15: 存檔版本與遷移（連續版本/舊存檔補齊/只跑一次/冪等/拒絕新版）驗證通過");
+  }
+
+  // Test 16: 常駐懸賞（可重複）
+  {
+    const dd = global.window.GAME_DATA;
+    const bg = new StarfallEngine(dd);
+    bg.state.chapter = 2;
+    let list = bg.getBounties();
+    assert.strictEqual(list.length, 3, "永遠有 3 張懸賞單");
+    assert.ok(list.every(b => b.title && b.reward.gold > 0 && b.count > 0));
+    assert.ok(!bg.claimBounty(0).ok, "未達成不可領取");
+    assert.ok(!bg.claimBounty(9).ok);
+    // 湊齊第一張：依類型給進度/素材
+    const b0 = list[0];
+    if (b0.kind === "item") bg.state.inventory[b0.item] = b0.count;
+    else bg.state.bounty.slots[0].prog = b0.count;
+    const gold0 = bg.state.gold;
+    const r = bg.claimBounty(0);
+    assert.ok(r.ok && bg.state.gold >= gold0 + b0.reward.gold, "領取發金幣與道具");
+    assert.strictEqual(bg.getBounties().length, 3, "領取後換上新的一張");
+    assert.strictEqual(bg.state.bounty.claimed, 1);
+    if (b0.kind === "item") assert.ok(!bg.state.inventory[b0.item], "素材收購會扣除素材");
+    // 擊殺累計
+    bg.state.bounty.slots[1] = { kind: "kill", enemy: "drowned_sentinel", count: 2, prog: 0, title: "t", reward: { gold: 10, items: { healing_potion: 1 } } };
+    for (let i = 0; i < 2; i++) { bg.startCombat({ enemyId: "drowned_sentinel" }, "5,5"); bg.winCombat(); }
+    assert.ok(bg.getBounties()[1].ready, "擊殺懸賞累計進度");
+    // 生成的懸賞只會要求已解鎖章節的魔物
+    for (let i = 0; i < 60; i++) {
+      const nb = bg._newBounty();
+      if (nb.enemy && nb.enemy !== "any") assert.ok((dd.enemies[nb.enemy].chapter || 1) <= 2, "不出現未解鎖章節的魔物");
+      if (nb.kind === "item") assert.ok(dd.items[nb.item], "收購素材需存在");
+    }
+    const rt = new StarfallEngine(dd);
+    rt.deserialize(bg.serialize());
+    assert.strictEqual(rt.state.bounty.claimed, 1, "存檔往返保留懸賞");
+    console.log("[PASS] Test 16: 常駐懸賞（3 張/領取換新/擊殺累計/素材收購/存檔）驗證通過");
+  }
+
+  console.log("=== 《星隕編年史：魔物獵人 3D 狩獵紀元》全部 16 大自動化測試 100% 通過！ ===");
 }
 
 runTests();
