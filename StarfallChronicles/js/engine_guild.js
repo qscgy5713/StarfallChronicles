@@ -277,19 +277,6 @@ class GuildMixin {
     return { ok: true, quest: q, text: parts.join("、") };
   }
 
-  // 把 EXP 換算成等級；回傳是否升級（呼叫端據此決定 recalcStats 是否補滿 HP/MP）
-  _levelUpFromExp() {
-    let leveled = false;
-    while (this.state.exp >= this.state.maxExp) {
-      this.state.exp -= this.state.maxExp;
-      this.state.level++;
-      this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-      this.state.skillPoints += 1;
-      leveled = true;
-    }
-    return leveled;
-  }
-
   // 擊敗魔物時累計「獵殺」類委託
   _boardOnKill(enemyId) {
     const b = this.getBoardState();
@@ -369,10 +356,7 @@ class GuildMixin {
   }
 }
 
-const StarfallGuild = {};
-Object.getOwnPropertyNames(GuildMixin.prototype)
-  .filter(n => n !== "constructor")
-  .forEach(n => { StarfallGuild[n] = GuildMixin.prototype[n]; });
+const StarfallGuild = (typeof mixinFrom === "function" ? mixinFrom : require("./mixin.js").mixinFrom)(GuildMixin);
 
 if (typeof window !== "undefined") window.StarfallGuild = StarfallGuild;
 if (typeof module !== "undefined" && module.exports) module.exports = { StarfallGuild };

@@ -191,10 +191,7 @@ class StoryMixin {
   }
 }
 
-const StarfallStory = {};
-Object.getOwnPropertyNames(StoryMixin.prototype)
-  .filter(n => n !== "constructor")
-  .forEach(n => { StarfallStory[n] = StoryMixin.prototype[n]; });
+const StarfallStory = (typeof mixinFrom === "function" ? mixinFrom : require("./mixin.js").mixinFrom)(StoryMixin);
 
 if (typeof window !== "undefined") window.StarfallStory = StarfallStory;
 if (typeof module !== "undefined" && module.exports) module.exports = { StarfallStory };

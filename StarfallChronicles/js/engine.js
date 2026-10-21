@@ -6,6 +6,42 @@
 const RT_HP_MULT = 14;
 
 class StarfallEngine {
+  // 把 EXP 換算成等級；回傳是否升級（呼叫端據此決定 recalcStats 是否補滿 HP/MP）
+  _levelUpFromExp() {
+    let leveled = false;
+    while (this.state.exp >= this.state.maxExp) {
+      this.state.exp -= this.state.maxExp;
+      this.state.level++;
+      this.state.maxExp = Math.round(this.state.maxExp * 1.35);
+      this.state.skillPoints += 1;
+      leveled = true;
+    }
+    return leveled;
+  }
+
+  // 營火休息：讓被擊敗的一般魔物重生，仍存活的魔物（含巡邏位置、暈眩狀態）原樣保留
+  respawnEnemies() {
+    const sub = this.state.subZone || 1;
+    const alive = Object.entries(this.activeEvents).filter(([c, e]) => {
+      const [x, y] = c.split(",").map(Number);
+      return e && e.type === "enemy" && this.activeMap[y] && this.activeMap[y][x] === "E";
+    });
+    this.loadZone(sub, this.state.x, this.state.y, false, true);
+    alive.forEach(([coord, ev]) => {
+      const home = ev.home || coord;
+      const fresh = this.activeEvents[home];
+      if (fresh && fresh.type === "enemy") {
+        const [hx, hy] = home.split(",").map(Number);
+        this.activeMap[hy][hx] = ".";
+        delete this.activeEvents[home];
+        delete this.activeLabels[home];
+      }
+      const [x, y] = coord.split(",").map(Number);
+      this.activeMap[y][x] = "E";
+      this.activeEvents[coord] = ev;
+    });
+  }
+
   // 舊存檔：一般魔物原本擊敗後永久消失，現在改為會重生，清掉這些已完成標記（精英/首領/帶旗標者保留）
   _migrateEnemyRespawn() {
     if (this.state.respawnMigrated) return;
@@ -373,7 +409,7 @@ class StarfallEngine {
     const obj = this._baseObjective();
     const s = this.state;
     if (s.inAbyss || !obj) return obj;
-    if (/^(首領決戰|最終決戰)/.test(obj.text) && !this.isChapterGateOpen(s.chapter)) {
+    if (obj.boss && !this.isChapterGateOpen(s.chapter)) {
       const g = this.getChapterGate(s.chapter);
       const here = g.elite && g.elite.zone === (s.subZone || 1);
       return {
@@ -537,6 +573,7 @@ class StarfallEngine {
           x: 15,
           y: 7,
           step: "區域 1-3",
+          boss: true,
           text: "首領決戰：前往祭壇中央 (15,7) 擊敗【首領：荊棘巨獸・巴爾薩】！",
           sub: "弱點提示：荊棘巨獸懼怕【烈焰】與【星輝】屬性，命中弱點可額外削盾並增傷 25%！"
         };
@@ -673,6 +710,7 @@ class StarfallEngine {
           x: 15,
           y: 7,
           step: "區域 2-3",
+          boss: true,
           text: "首領決戰：前往聖堂中央 (15,7) 擊敗【首領：時之守衛・克羅諾斯】！",
           sub: "弱點提示：克羅諾斯懼怕【星輝】與【烈焰】屬性攻擊！"
         };
@@ -800,6 +838,7 @@ class StarfallEngine {
           x: 15,
           y: 7,
           step: "區域 3-3",
+          boss: true,
           text: "首領決戰：前往王座中央 (15,7) 擊敗【首領：赤焰巨龍・伊格尼斯】！",
           sub: "弱點提示：赤焰巨龍懼怕【寒霜】與【虛空】屬性戰技！"
         };
@@ -927,6 +966,7 @@ class StarfallEngine {
           x: 15,
           y: 7,
           step: "區域 4-3",
+          boss: true,
           text: "首領決戰：前往穹頂中央 (15,7) 擊敗【首領：虛空星使・阿斯特拉】！",
           sub: "弱點提示：阿斯特拉懼怕【虛空】與【物理】屬性戰技！"
         };
@@ -1053,6 +1093,7 @@ class StarfallEngine {
       x: 15,
       y: 7,
       step: "最終決戰",
+      boss: true,
       text: "最終決戰：前往王座中央 (15,7) 擊敗【最終首領：噬星者・莫比烏斯】，決定阿卡迪亞的命運！",
       sub: "擊敗莫比烏斯後即可選擇多重結局！"
     };
@@ -1692,6 +1733,7 @@ class StarfallEngine {
     if (!this.state.exploredByChapter[zKey]) {
       this.state.exploredByChapter[zKey] = {};
     }
+    Object.entries(this.activeEvents).forEach(([c, e]) => { if (e && e.type === "enemy") e.home = c; });
     this.placeStoryEvents();
     this.updateFogOfWar();
     if (silent) {
@@ -1757,12 +1799,7 @@ class StarfallEngine {
       this.state.gold += 90;
       this.state.exp += 60;
       this.addItem("star_shard", 2);
-      while (this.state.exp >= this.state.maxExp) {
-        this.state.exp -= this.state.maxExp;
-        this.state.level++;
-        this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-        this.state.skillPoints += 1;
-      }
+      this._levelUpFromExp();
       this.recalcStats(false);
       this.log(
         `[區域探索大師] 本區地圖探索度突破 ${pct}%！獲得探索里程碑獎勵：+90 金幣、+60 EXP、【星辰碎晶】x2！`,
@@ -1958,13 +1995,7 @@ class StarfallEngine {
       }
     }
 
-    while (this.state.exp >= this.state.maxExp) {
-      this.state.exp -= this.state.maxExp;
-      this.state.level++;
-      this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-      this.state.skillPoints += 1;
-      this.recalcStats(true);
-    }
+    if (this._levelUpFromExp()) this.recalcStats(true);
     this.updateFogOfWar();
     if (typeof window !== "undefined" && window.soundSystem) {
       window.soundSystem.sfx("puzzle");
@@ -2006,7 +2037,7 @@ class StarfallEngine {
       this.saveGame(0);
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("heal");
       this.log("[營火休息] 生命值、星力與武器斬味已完全恢復，並完成了自動存檔（可按 [G] 享用貓飯）。魔物也在林間重新出沒了。", "success");
-      if (!this.state.inAbyss) this.loadZone(this.state.subZone || 1, x, y, false, true);
+      if (!this.state.inAbyss) this.respawnEnemies();
       if (typeof window !== "undefined" && window.gameUI) {
         window.gameUI.showToast("[營火休憩] HP/MP/紫斬 全滿 & 已自動存檔 (按 [G] 貓飯)", "teal");
         if (window.gameUI.addMapFloatText) window.gameUI.addMapFloatText(x, y, "HP/MP/紫斬 全滿!", "#4ade80");
@@ -2100,12 +2131,7 @@ class StarfallEngine {
             if (rw.exp) {
               this.state.exp += rw.exp;
               rewardText += ` +${rw.exp}EXP`;
-              while (this.state.exp >= this.state.maxExp) {
-                this.state.exp -= this.state.maxExp;
-                this.state.level++;
-                this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-                this.state.skillPoints += 1;
-              }
+              this._levelUpFromExp();
               this.recalcStats(false);
             }
             if (rw.items) {
@@ -2326,12 +2352,7 @@ class StarfallEngine {
       this.state.exp += bonusExp;
       this.state.burst = Math.min(100, this.state.burst + 35);
       this.addItem("star_shard", 2);
-      while (this.state.exp >= this.state.maxExp) {
-        this.state.exp -= this.state.maxExp;
-        this.state.level++;
-        this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-        this.state.skillPoints += 1;
-      }
+      this._levelUpFromExp();
       this.recalcStats(false);
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("levelup");
       this.log(
@@ -2370,12 +2391,7 @@ class StarfallEngine {
       this.state.gold += 80;
       this.state.exp += 65;
       this.state.stats.reliquariesOpened = (this.state.stats.reliquariesOpened || 0) + 1;
-      while (this.state.exp >= this.state.maxExp) {
-        this.state.exp -= this.state.maxExp;
-        this.state.level++;
-        this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-        this.state.skillPoints += 1;
-      }
+      this._levelUpFromExp();
       this.recalcStats(false);
       this.state.hp = Math.min(this.state.maxHp, this.state.hp + 15);
       if (typeof window !== "undefined" && window.soundSystem) window.soundSystem.sfx("levelup");
@@ -2426,12 +2442,7 @@ class StarfallEngine {
     if (rw.fullBurst) this.state.burst = 100;
     if (rw.exp) {
       this.state.exp += rw.exp;
-      while (this.state.exp >= this.state.maxExp) {
-        this.state.exp -= this.state.maxExp;
-        this.state.level++;
-        this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-        this.state.skillPoints += 1;
-      }
+      this._levelUpFromExp();
     }
     if (rw.items) {
       Object.entries(rw.items).forEach(([id, cnt]) => this.addItem(id, cnt));
@@ -3391,14 +3402,7 @@ class StarfallEngine {
     }
     this.unlockAchievement("ach_first_blood");
 
-    let leveledUp = false;
-    while (this.state.exp >= this.state.maxExp) {
-      this.state.exp -= this.state.maxExp;
-      this.state.level++;
-      this.state.maxExp = Math.round(this.state.maxExp * 1.35);
-      this.state.skillPoints += 1;
-      leveledUp = true;
-    }
+    const leveledUp = this._levelUpFromExp();
     this.recalcStats(leveledUp);
     this.checkMilestoneAchievements();
 

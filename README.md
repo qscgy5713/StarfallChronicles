@@ -107,6 +107,7 @@ node StarfallChronicles/tests/playthrough.js
     │   ├── data_story.js               # 10 條三段式故事支線、15 段劇情場景與對應手札
     │   ├── data_gen.js                 # 衍生資料：魔物素材/狩獵裝備、委託板、章節認證、訓練場、高階補給
     │   ├── engine.js                   # 遊戲狀態機、斬味系統、部位破壞斷尾、太刀氣刃與貓飯引擎
+    │   ├── mixin.js                    # mixinFrom(Class)：class 方法轉成可掛載的 mixin
     │   ├── engine_guild.js             # 委託板、章節認證、公會訓練場、NPC 支線進度、無盡星淵進出 (mixin)
     │   ├── engine_story.js             # 故事支線與劇情場景 NPC 放置/對話 (mixin)
     │   ├── combat_rt.js                # 即時戰鬥核心（魔物 AI、預警範圍、翻滾無敵、冷卻、狀態節拍）

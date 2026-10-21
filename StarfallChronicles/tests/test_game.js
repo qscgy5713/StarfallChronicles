@@ -38,6 +38,7 @@ function runTests() {
     "../js/combat_rt_ui.js",
     "../js/data_chapters.js",
     "../js/data_gen.js",
+    "../js/mixin.js",
     "../js/engine_guild.js",
     "../js/engine_story.js",
     "../js/data_story.js",
@@ -651,6 +652,21 @@ function runTests() {
     assert.ok(!Object.values(sg.activeEvents).find(e => e.sceneId === "s1a").firstReward, "領過後重新放置不再有獎勵");
     assert.ok(sg.getStoryLog().some(l => l.done) && sg.getStoryLog().length === 2, "故事紀錄應列出本章 2 條");
     // 手札數量讓結局解鎖條件更容易達成
+    // 營火重生：打倒的魔物回來，存活的（含巡邏位置）保留；不重複生出
+    const rg = new StarfallEngine(dd);
+    rg.loadZone(1, null, null, false, true);
+    const enemies0 = Object.entries(rg.activeEvents).filter(([c, e]) => e.type === "enemy");
+    const [kc, ke] = enemies0[0];
+    const [mc, me] = enemies0[1];
+    rg.startCombat(ke, kc); rg.winCombat();
+    // 模擬另一隻巡邏移動
+    const [mx, my] = mc.split(",").map(Number);
+    rg.activeMap[my][mx] = "."; delete rg.activeEvents[mc];
+    rg.activeMap[my][mx + 1] = "E"; rg.activeEvents[`${mx + 1},${my}`] = me;
+    rg.respawnEnemies();
+    assert.strictEqual(Object.values(rg.activeEvents).filter(e => e.type === "enemy").length, enemies0.length, "重生後魔物總數不變（無重複）");
+    assert.ok(rg.activeEvents[kc] && rg.activeEvents[kc].type === "enemy", "被打倒的魔物重生");
+    assert.ok(rg.activeEvents[`${mx + 1},${my}`] === me && !rg.activeEvents[mc], "存活的巡邏魔物保持原位置且不複製");
     sg.state.loreUnlocked = dd.storyChains.map(c => c.lore).slice(0, 6);
     assert.ok(sg.getAvailableEndings().includes("symbiosis"), "6 篇手札可解鎖共生結局");
     sg.state.loreUnlocked = dd.storyChains.map(c => c.lore);
